@@ -26,8 +26,21 @@ FROM node:20-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
-# docker CLI so the admin console can inspect/restart sibling containers
-RUN apt-get update && apt-get install -y --no-install-recommends docker.io \
+# docker CLI + compose plugin so the admin console can inspect/restart sibling
+# containers and the setup wizard can recreate the feeders to apply new keys.
+ARG COMPOSE_VERSION=v2.29.7
+RUN apt-get update && apt-get install -y --no-install-recommends docker.io ca-certificates curl \
+    && mkdir -p /usr/libexec/docker/cli-plugins \
+    && case "$(uname -m)" in \
+         x86_64) C=x86_64 ;; \
+         aarch64|arm64) C=aarch64 ;; \
+         armv7l) C=armv7 ;; \
+         *) C="$(uname -m)" ;; \
+       esac \
+    && curl -fsSL "https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-linux-${C}" \
+         -o /usr/libexec/docker/cli-plugins/docker-compose \
+    && chmod +x /usr/libexec/docker/cli-plugins/docker-compose \
+    && apt-get purge -y curl && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /app/node_modules ./node_modules

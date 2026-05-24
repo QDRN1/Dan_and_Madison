@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Aircraft, LiveSnapshot, PublicConfig } from "@qdrn/shared";
+import type { Aircraft, LiveSnapshot, PublicConfig, TrailPoint } from "@qdrn/shared";
 
 interface RadarState {
   config: PublicConfig | null;
@@ -8,9 +8,11 @@ interface RadarState {
   now: number;
   messageRate: number;
   selectedHex: string | null;
+  selectedTrail: TrailPoint[] | null;
   setConfig: (c: PublicConfig) => void;
   applySnapshot: (s: LiveSnapshot) => void;
   select: (hex: string | null) => void;
+  setSelectedTrail: (t: TrailPoint[] | null) => void;
   selected: () => Aircraft | null;
 }
 
@@ -21,6 +23,7 @@ export const useRadar = create<RadarState>((set, get) => ({
   now: Date.now(),
   messageRate: 0,
   selectedHex: null,
+  selectedTrail: null,
 
   setConfig: (config) => set({ config }),
 
@@ -30,7 +33,8 @@ export const useRadar = create<RadarState>((set, get) => ({
     set({ aircraft: s.aircraft, byHex, now: s.now, messageRate: s.messageRate ?? 0 });
   },
 
-  select: (selectedHex) => set({ selectedHex }),
+  select: (selectedHex) => set({ selectedHex, selectedTrail: null }),
+  setSelectedTrail: (selectedTrail) => set({ selectedTrail }),
   selected: () => {
     const { selectedHex, byHex } = get();
     return selectedHex ? byHex[selectedHex] ?? null : null;

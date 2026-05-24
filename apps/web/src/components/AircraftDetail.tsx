@@ -8,35 +8,47 @@ export function AircraftDetail(): JSX.Element | null {
   const selectedHex = useRadar((s) => s.selectedHex);
   const live = useRadar((s) => (selectedHex ? s.byHex[selectedHex] : undefined));
   const select = useRadar((s) => s.select);
+  const setSelectedTrail = useRadar((s) => s.setSelectedTrail);
   const [detail, setDetail] = useState<Aircraft | null>(null);
+  const [expanded, setExpanded] = useState(false);
 
-  // Pull full enrichment for the detail card when selection changes.
+  // Pull full enrichment + trail for the detail card when selection changes.
   useEffect(() => {
     setDetail(null);
+    setExpanded(false);
     if (!selectedHex) return;
     let alive = true;
     api
       .aircraft(selectedHex)
-      .then((d) => alive && setDetail(d))
+      .then((d) => {
+        if (!alive) return;
+        setDetail(d);
+        setSelectedTrail(d.trail ?? []);
+      })
       .catch(() => undefined);
     return () => {
       alive = false;
     };
-  }, [selectedHex]);
+  }, [selectedHex, setSelectedTrail]);
 
   if (!selectedHex) return null;
-  const a: Aircraft | undefined = { ...(detail ?? {}), ...(live ?? {}) } as Aircraft;
+  const a: Aircraft = { ...(detail ?? {}), ...(live ?? {}) } as Aircraft;
   if (!a.hex) a.hex = selectedHex;
   const e = a.enrichment ?? detail?.enrichment;
   const ft = altFeet(a);
 
   const origin = e?.route?.origin;
   const dest = e?.route?.destination;
+  const photo = e?.photo;
 
   return (
-    <div className="glass sheet scroll">
+    <div className={`glass sheet scroll${expanded ? " sheet--expanded" : ""}`}>
+      <div className="sheet-handle" onClick={() => setExpanded((v) => !v)} role="button" aria-label="Expand">
+        <span />
+      </div>
+
       <div className="sheet-head">
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <div className="callsign" style={{ color: altColor(ft) }}>
             {label(a)}
           </div>
@@ -49,6 +61,13 @@ export function AircraftDetail(): JSX.Element | null {
           ✕
         </button>
       </div>
+
+      {photo && (
+        <a className="ac-photo" href={photo.link} target="_blank" rel="noreferrer">
+          <img src={photo.url} alt={label(a)} loading="lazy" />
+          {photo.photographer && <span className="ac-photo-credit">© {photo.photographer} / Planespotters</span>}
+        </a>
+      )}
 
       {(origin || dest) && (
         <div className="route">

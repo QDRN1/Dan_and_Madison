@@ -62,16 +62,28 @@ export async function enrich(hex: string, flight?: string): Promise<Enrichment |
 }
 
 async function doEnrich(hex: string, callsign: string): Promise<Enrichment | undefined> {
-  const [aircraft, route] = await Promise.all([
+  const [aircraft, route, photo] = await Promise.all([
     lookupAircraft(hex),
     callsign ? lookupRoute(callsign) : Promise.resolve(undefined),
+    lookupPhoto(hex),
   ]);
-  if (!aircraft && !route) return undefined;
+  if (!aircraft && !route && !photo) return undefined;
   return {
     ...aircraft,
     route,
+    photo,
     fetchedAt: Date.now(),
   };
+}
+
+// ─── Photo (Planespotters, free, attribution required) ───────────────────────
+
+async function lookupPhoto(hex: string): Promise<Enrichment["photo"] | undefined> {
+  const j = await fetchJson(`https://api.planespotters.net/pub/photos/hex/${encodeURIComponent(hex)}`);
+  const p = j?.photos?.[0];
+  const url = p?.thumbnail_large?.src ?? p?.thumbnail?.src;
+  if (!url) return undefined;
+  return { url, link: p.link || undefined, photographer: p.photographer || undefined };
 }
 
 // ─── Aircraft (hex → reg/type/operator) ──────────────────────────────────────

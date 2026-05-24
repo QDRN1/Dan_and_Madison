@@ -46,6 +46,7 @@ export function MapView(): JSX.Element {
   const config = useRadar((s) => s.config);
   const aircraft = useRadar((s) => s.aircraft);
   const selectedHex = useRadar((s) => s.selectedHex);
+  const selectedTrail = useRadar((s) => s.selectedTrail);
   const select = useRadar((s) => s.select);
 
   // Init map once config (style url + receiver) is available.
@@ -105,6 +106,23 @@ export function MapView(): JSX.Element {
         },
       });
 
+      // Selected aircraft trail (altitude-colored segments)
+      map.addSource("trail", { type: "geojson", data: emptyFc() });
+      map.addLayer({
+        id: "trail-glow",
+        type: "line",
+        source: "trail",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": "#a3c940", "line-width": 7, "line-opacity": 0.18, "line-blur": 4 },
+      });
+      map.addLayer({
+        id: "trail",
+        type: "line",
+        source: "trail",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": ["get", "color"], "line-width": 2.6, "line-opacity": 0.9 },
+      });
+
       // Aircraft
       map.addSource("aircraft", { type: "geojson", data: emptyFc() });
       map.addLayer({
@@ -155,6 +173,7 @@ export function MapView(): JSX.Element {
 
       readyRef.current = true;
       updateSource();
+      updateTrail();
 
       map.on("click", "ac-plane", (e) => {
         const f = e.features?.[0];
@@ -207,11 +226,36 @@ export function MapView(): JSX.Element {
     src.setData(fc);
   }
 
+  function updateTrail(): void {
+    const map = mapRef.current;
+    if (!map || !readyRef.current) return;
+    const src = map.getSource("trail") as GeoJSONSource | undefined;
+    if (!src) return;
+    const pts = selectedTrail ?? [];
+    const features: FeatureCollection["features"] = [];
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1]!;
+      const b = pts[i]!;
+      features.push({
+        type: "Feature",
+        properties: { color: altColor(b.alt) },
+        geometry: { type: "LineString", coordinates: [[a.lon, a.lat], [b.lon, b.lat]] },
+      });
+    }
+    src.setData({ type: "FeatureCollection", features });
+  }
+
   // Push new aircraft / selection to the map.
   useEffect(() => {
     updateSource();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aircraft, selectedHex]);
+
+  // Draw the selected aircraft's trail.
+  useEffect(() => {
+    updateTrail();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTrail]);
 
   // Gently pan to a newly selected aircraft.
   useEffect(() => {

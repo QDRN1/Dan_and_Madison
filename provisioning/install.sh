@@ -66,6 +66,11 @@ if [[ ! -f .env ]]; then
     echo "ULTRAFEEDER_UUID=${UUID}" >> .env
 fi
 
+# The feeders read their keys from this file; the wizard writes it. Must exist
+# for compose's env_file. (Created empty if the friend hasn't added keys yet.)
+mkdir -p data
+[[ -f data/feeder.env ]] || printf '# Written by the QDRN Radar setup wizard\n' > data/feeder.env
+
 # ── 6. Build + start the stack ───────────────────────────────────────────────
 log "Building and starting the QDRN Radar stack"
 docker compose up -d --build

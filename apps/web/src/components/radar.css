@@ -229,6 +229,72 @@
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
+/* Aircraft photo (Planespotters) */
+.ac-photo {
+  display: block;
+  position: relative;
+  margin: 12px 0 4px;
+  border-radius: 12px;
+  overflow: hidden;
+  line-height: 0;
+  border: 1px solid var(--border);
+}
+.ac-photo img {
+  width: 100%;
+  height: 168px;
+  object-fit: cover;
+  display: block;
+}
+.ac-photo-credit {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  font-size: 10px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 2px 6px;
+  border-radius: 6px;
+  line-height: 1.3;
+}
+
+/* Grab handle (mobile bottom sheet) */
+.sheet-handle {
+  display: none;
+}
+
+/* Mobile: dock the detail as a real bottom sheet with a drag handle. */
+@media (max-width: 560px) {
+  .sheet {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    transform: none;
+    width: 100%;
+    max-width: 100%;
+    border-radius: 18px 18px 0 0;
+    max-height: 44vh;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+    transition: max-height 0.25s ease;
+  }
+  .sheet--expanded {
+    max-height: 86vh;
+  }
+  .sheet-handle {
+    display: flex;
+    justify-content: center;
+    padding: 0 0 10px;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .sheet-handle span {
+    width: 42px;
+    height: 4px;
+    border-radius: 3px;
+    background: var(--muted);
+    opacity: 0.6;
+  }
+}
+
 .setup-link {
   position: absolute;
   bottom: calc(10px + env(safe-area-inset-bottom));

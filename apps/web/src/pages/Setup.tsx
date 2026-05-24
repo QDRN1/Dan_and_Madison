@@ -253,8 +253,9 @@ function DoneStep(): JSX.Element {
   return (
     <div>
       <CaptainQ>
-        All set, Captain! Your QDRN radar is live and scanning the skies. Tap any plane to see
-        where it's headed. Fair winds! ✈️
+        All set, Captain! I'm firing up your feeders now — FlightAware and FlightRadar24 will
+        start receiving your data within a minute or two (that's what earns your free pro
+        accounts). Tap any plane to see where it's headed. Fair winds! ✈️
       </CaptainQ>
       <h2 className="step-title">You're all set! 🎉</h2>
       <p className="step-sub">Your radar is up and running. Open the live map to start tracking aircraft overhead.</p>

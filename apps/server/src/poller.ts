@@ -1,9 +1,13 @@
 import { EventEmitter } from "node:events";
-import type { Aircraft, LiveSnapshot } from "@qdrn/shared";
+import type { Aircraft, LiveSnapshot, TrailPoint } from "@qdrn/shared";
 import { AIRCRAFT_JSON_URL, POLL_INTERVAL_MS, getReceiver } from "./config.js";
 import { enrich } from "./enrichment.js";
 import { bearing, distanceNm } from "./geo.js";
 import { isFlagged, recordSighting } from "./stats.js";
+
+const TRAIL_MAX_POINTS = 250;
+const TRAIL_MAX_AGE_MS = 45 * 60 * 1000;
+const TRAIL_MIN_GAP_MS = 2000;
 
 /** Raw aircraft entry shape from readsb/ultrafeeder aircraft.json. */
 interface RawAircraft {
@@ -24,6 +28,7 @@ interface RawAircraft {
 
 class AircraftStore extends EventEmitter {
   private aircraft = new Map<string, Aircraft>();
+  private trails = new Map<string, TrailPoint[]>();
   private messageRate = 0;
   private timer?: NodeJS.Timeout;
   private lastNow = 0;
@@ -54,6 +59,26 @@ class AircraftStore extends EventEmitter {
 
   get(hex: string): Aircraft | undefined {
     return this.aircraft.get(hex);
+  }
+
+  getTrail(hex: string): TrailPoint[] {
+    return this.trails.get(hex) ?? [];
+  }
+
+  private recordTrail(ac: Aircraft, now: number): void {
+    if (ac.lat == null || ac.lon == null) return;
+    const alt = ac.altBaro === "ground" ? null : typeof ac.altBaro === "number" ? ac.altBaro : ac.altGeom ?? null;
+    let pts = this.trails.get(ac.hex);
+    if (!pts) {
+      pts = [];
+      this.trails.set(ac.hex, pts);
+    }
+    const last = pts[pts.length - 1];
+    if (last && now - last.t < TRAIL_MIN_GAP_MS && last.lat === ac.lat && last.lon === ac.lon) return;
+    pts.push({ lon: ac.lon, lat: ac.lat, alt, t: now });
+    // Trim by count and age.
+    const cutoff = now - TRAIL_MAX_AGE_MS;
+    while (pts.length > TRAIL_MAX_POINTS || (pts.length > 0 && pts[0]!.t < cutoff)) pts.shift();
   }
 
   private async poll(): Promise<void> {
@@ -108,13 +133,19 @@ class AircraftStore extends EventEmitter {
         });
       }
 
-      // Record for stats once we have a position.
-      if (ac.lat != null && ac.lon != null) recordSighting(ac);
+      // Record for stats + trail once we have a position.
+      if (ac.lat != null && ac.lon != null) {
+        recordSighting(ac);
+        this.recordTrail(ac, now);
+      }
     }
 
     // Drop aircraft we haven't seen recently (stale > 60s).
     for (const [hex, ac] of this.aircraft) {
-      if (!seen.has(hex) && (ac.seen ?? 0) > 60) this.aircraft.delete(hex);
+      if (!seen.has(hex) && (ac.seen ?? 0) > 60) {
+        this.aircraft.delete(hex);
+        this.trails.delete(hex);
+      }
     }
 
     this.emit("snapshot", this.getSnapshot());

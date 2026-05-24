@@ -11,6 +11,7 @@ import {
   setReceiver,
 } from "../config.js";
 import { enrich } from "../enrichment.js";
+import { applyFeedersInBackground, writeFeederEnv } from "../feeder.js";
 import { store } from "../poller.js";
 import { getStats } from "../stats.js";
 
@@ -51,7 +52,7 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
     if (!ac) return reply.code(404).send({ error: "not_found" });
     // Make sure enrichment is attached for the detail view.
     if (!ac.enrichment) ac.enrichment = await enrich(hex, ac.flight);
-    return ac;
+    return { ...ac, trail: store.getTrail(hex) };
   });
 
   app.get("/stats", async () => {
@@ -95,6 +96,18 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
     if (b.flightRadar24Token) setApiKey("flightRadar24Token", b.flightRadar24Token.trim());
     if (b.fr24SharingKey) setApiKey("fr24SharingKey", b.fr24SharingKey.trim());
     if (b.piawareFeederId) setApiKey("piawareFeederId", b.piawareFeederId.trim());
-    return { ok: true, setup: setupState() };
+
+    // Push feeder keys into the shared env file and recreate the feeder
+    // containers in the background so feeding "just works" with no SSH.
+    let feedersApplying = false;
+    if (b.fr24SharingKey || b.piawareFeederId) {
+      writeFeederEnv({
+        ...(b.fr24SharingKey ? { FR24KEY: b.fr24SharingKey } : {}),
+        ...(b.piawareFeederId ? { FEEDER_ID: b.piawareFeederId } : {}),
+      });
+      applyFeedersInBackground((m) => req.log.info(m));
+      feedersApplying = true;
+    }
+    return { ok: true, setup: setupState(), feedersApplying };
   });
 }

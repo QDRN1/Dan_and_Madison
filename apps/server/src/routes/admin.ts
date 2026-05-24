@@ -3,6 +3,7 @@ import { promisify } from "node:util";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { ServiceName, ServiceStatus } from "@qdrn/shared";
 import { ADMIN_EMAILS } from "../config.js";
+import { applyFeeders } from "../feeder.js";
 
 const exec = promisify(execFile);
 
@@ -90,6 +91,8 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
       }
     },
   );
+
+  app.post("/feeders/apply", async () => applyFeeders());
 
   app.get("/info", async () => ({
     sshHint: "ssh over the Cloudflare tunnel — see infra/cloudflared and docs/ADMIN.md",

@@ -7,6 +7,10 @@
 #
 # Copy .env.example -> .env and fill it in first.
 
+# Fixed project name so the app container can recreate the feeder services
+# (via the mounted compose file) when the friend adds their keys in the wizard.
+name: qdrn-radar
+
 services:
   ultrafeeder:
     image: ghcr.io/sdr-enthusiasts/docker-adsb-ultrafeeder:latest
@@ -47,11 +51,14 @@ services:
     container_name: fr24feed
     restart: unless-stopped
     depends_on: [ultrafeeder]
+    # FR24KEY comes from data/feeder.env, which the setup wizard writes. Keep it
+    # out of `environment:` so the wizard value isn't overridden by an empty var.
+    env_file:
+      - ./data/feeder.env
     environment:
       - TZ=${TZ:-America/New_York}
       - BEASTHOST=ultrafeeder
       - BEASTPORT=30005
-      - FR24KEY=${FR24_SHARING_KEY}
       - MLAT=yes
 
   piaware:
@@ -59,13 +66,15 @@ services:
     container_name: piaware
     restart: unless-stopped
     depends_on: [ultrafeeder]
+    # FEEDER_ID comes from data/feeder.env (written by the setup wizard).
+    env_file:
+      - ./data/feeder.env
     environment:
       - TZ=${TZ:-America/New_York}
       - BEASTHOST=ultrafeeder
       - BEASTPORT=30005
       - LAT=${FEEDER_LAT}
       - LONG=${FEEDER_LON}
-      - FEEDER_ID=${PIAWARE_FEEDER_ID}
 
   qdrn-radar:
     build:
@@ -87,10 +96,17 @@ services:
       - RANGE_RINGS_NM=${RANGE_RINGS_NM:-50,100,150}
       - SETUP_PIN=${SETUP_PIN:-1234}
       - ADMIN_EMAILS=${ADMIN_EMAILS}
+      - FEEDER_ENV_PATH=/app/data/feeder.env
+      - STACK_DIR=/app/stack
+      - COMPOSE_PROJECT=qdrn-radar
     volumes:
       - ./data:/app/data
-      # Lets the admin console inspect/restart sibling containers (read-only-ish).
+      # Lets the admin console inspect/restart sibling containers, and lets the
+      # setup wizard recreate the feeders to apply new keys (compose-in-container).
       - /var/run/docker.sock:/var/run/docker.sock
+      - ./docker-compose.yml:/app/stack/docker-compose.yml:ro
+      - ./.env:/app/stack/.env:ro
+      - ./data:/app/stack/data
 
   cloudflared:
     image: cloudflare/cloudflared:latest

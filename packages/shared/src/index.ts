@@ -34,6 +34,18 @@ export interface Aircraft {
   flagged?: boolean;
   /** Enrichment (route/operator/type), filled in asynchronously. */
   enrichment?: Enrichment;
+  /** Recent position history (only populated on the detail endpoint). */
+  trail?: TrailPoint[];
+}
+
+/** A single point in an aircraft's recent flight path. */
+export interface TrailPoint {
+  lon: number;
+  lat: number;
+  /** Altitude in feet, or null if unknown / on ground. */
+  alt: number | null;
+  /** Unix ms timestamp. */
+  t: number;
 }
 
 /** Enrichment data merged in from adsbdb/hexdb/FlightAware/FR24. */
@@ -47,10 +59,20 @@ export interface Enrichment {
   manufacturer?: string;
   built?: string;
   route?: Route;
+  /** Photo of the airframe (Planespotters), with attribution. */
+  photo?: AircraftPhoto;
   /** Where the enrichment came from, for the UI/debugging. */
   source?: EnrichmentSource;
   /** Unix ms when enrichment was fetched. */
   fetchedAt?: number;
+}
+
+export interface AircraftPhoto {
+  /** Large thumbnail URL, suitable for the detail panel. */
+  url: string;
+  /** Link back to the photo page (required for attribution). */
+  link?: string;
+  photographer?: string;
 }
 
 export type EnrichmentSource =
