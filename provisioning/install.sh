@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# ─────────────────────────────────────────────────────────────────────────────
+# QDRN Radar — one-shot provisioning for a Raspberry Pi 4 (Raspberry Pi OS).
+# Run from the repo root:  sudo bash provisioning/install.sh
+# Idempotent — safe to re-run.
+# ─────────────────────────────────────────────────────────────────────────────
+set -euo pipefail
+
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$REPO_DIR"
+
+log() { printf "\n\033[1;32m==>\033[0m %s\n" "$*"; }
+
+if [[ $EUID -ne 0 ]]; then
+  echo "Please run with sudo: sudo bash provisioning/install.sh" >&2
+  exit 1
+fi
+
+# ── 1. Enable SSH (for remote access over the Cloudflare tunnel) ──────────────
+log "Enabling SSH"
+systemctl enable --now ssh 2>/dev/null || raspi-config nonint do_ssh 0 || true
+
+# ── 2. RTL-SDR: blacklist the kernel DVB driver so readsb can claim the dongle ─
+log "Blacklisting DVB-T kernel drivers for the SDR"
+cat >/etc/modprobe.d/blacklist-rtlsdr.conf <<'EOF'
+blacklist dvb_usb_rtl28xxu
+blacklist rtl2832
+blacklist rtl2830
+blacklist dvb_usb_v2
+EOF
+modprobe -r dvb_usb_rtl28xxu 2>/dev/null || true
+
+# ── 3. Docker + compose plugin ───────────────────────────────────────────────
+if ! command -v docker >/dev/null 2>&1; then
+  log "Installing Docker"
+  curl -fsSL https://get.docker.com | sh
+fi
+if ! docker compose version >/dev/null 2>&1; then
+  log "Installing docker compose plugin"
+  apt-get update && apt-get install -y docker-compose-plugin
+fi
+# Let the default 'pi' user run docker without sudo
+usermod -aG docker "${SUDO_USER:-pi}" 2>/dev/null || true
+
+# ── 4. WiFi captive portal (balena wifi-connect) ─────────────────────────────
+# Brings up a "QDRN-Radar-Setup" hotspot when the Pi can't reach WiFi, so the
+# friend can join it from their phone and pick their home network.
+if ! command -v wifi-connect >/dev/null 2>&1; then
+  log "Installing wifi-connect (captive portal)"
+  bash "$REPO_DIR/provisioning/wifi-connect/install-wifi-connect.sh" || \
+    echo "wifi-connect install skipped (no network?). Re-run later."
+fi
+log "Installing QDRN captive-portal service"
+install -m 644 "$REPO_DIR/provisioning/wifi-connect/qdrn-wifi-connect.service" \
+  /etc/systemd/system/qdrn-wifi-connect.service
+systemctl daemon-reload
+systemctl enable qdrn-wifi-connect.service || true
+
+# ── 5. App config ────────────────────────────────────────────────────────────
+if [[ ! -f .env ]]; then
+  log "Creating .env from .env.example — EDIT IT before going live"
+  cp .env.example .env
+  # Generate a tunnel UUID for the feeders if not present.
+  UUID="$(cat /proc/sys/kernel/random/uuid)"
+  sed -i "s/^ULTRAFEEDER_UUID=.*/ULTRAFEEDER_UUID=${UUID}/" .env 2>/dev/null || \
+    echo "ULTRAFEEDER_UUID=${UUID}" >> .env
+fi
+
+# ── 6. Build + start the stack ───────────────────────────────────────────────
+log "Building and starting the QDRN Radar stack"
+docker compose up -d --build
+
+cat <<'DONE'
+
+────────────────────────────────────────────────────────────
+ QDRN Radar is starting up. Next steps:
+   1. Edit .env  (Cloudflare token, receiver lat/lon/city, SETUP_PIN, ADMIN_EMAILS)
+   2. Re-run:  docker compose up -d
+   3. Configure the Cloudflare Tunnel + Access  (see infra/cloudflared/README.md)
+   4. Hand it to your friend — CaptainQ takes over at  radar.qdrn.io/md/setup
+────────────────────────────────────────────────────────────
+DONE

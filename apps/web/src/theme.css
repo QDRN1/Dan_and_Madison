@@ -1,0 +1,159 @@
+/* QDRN brand palette
+   Dark Blue #002D72 · Green #A3C940 · White #FFFFFF · Black #000000 · Light Gray #F0F0F0 */
+:root {
+  --qdrn-blue: #002d72;
+  --qdrn-green: #a3c940;
+  --qdrn-white: #ffffff;
+  --qdrn-black: #000000;
+  --qdrn-gray: #f0f0f0;
+
+  --bg: #001533;
+  --bg-grad: radial-gradient(1200px 800px at 70% -10%, #003a8f 0%, #001533 55%, #000a1f 100%);
+  --surface: rgba(0, 45, 114, 0.55);
+  --surface-solid: #022150;
+  --surface-2: rgba(0, 45, 114, 0.8);
+  --border: rgba(163, 201, 64, 0.18);
+  --accent: var(--qdrn-green);
+  --accent-2: #5b8def;
+  --text: var(--qdrn-gray);
+  --muted: #9fb0c9;
+  --danger: #ff4d4d;
+  --warn: #ffb300;
+
+  --shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
+  --radius: 14px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font);
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+a {
+  color: var(--accent);
+}
+
+/* Glass panel */
+.glass {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  backdrop-filter: blur(14px) saturate(120%);
+  -webkit-backdrop-filter: blur(14px) saturate(120%);
+  box-shadow: var(--shadow);
+}
+
+.btn {
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  padding: 12px 18px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  transition: transform 0.06s ease, background 0.15s ease, border-color 0.15s ease;
+}
+.btn:active {
+  transform: translateY(1px);
+}
+.btn-primary {
+  background: linear-gradient(180deg, var(--qdrn-green), #8aae33);
+  color: #06210a;
+  border-color: transparent;
+}
+.btn-primary:disabled {
+  opacity: 0.5;
+}
+.btn-block {
+  width: 100%;
+}
+
+.input {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(0, 10, 30, 0.6);
+  color: var(--text);
+  font-size: 16px; /* 16px avoids iOS zoom-on-focus */
+}
+.input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.label {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+  margin: 14px 0 6px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  background: rgba(163, 201, 64, 0.16);
+  color: var(--accent);
+}
+.pill.warn {
+  background: rgba(255, 179, 0, 0.16);
+  color: var(--warn);
+}
+.pill.danger {
+  background: rgba(255, 77, 77, 0.16);
+  color: var(--danger);
+}
+
+.mono {
+  font-family: var(--mono);
+}
+
+.scroll {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent) transparent;
+}
+.scroll::-webkit-scrollbar {
+  width: 8px;
+}
+.scroll::-webkit-scrollbar-thumb {
+  background: rgba(163, 201, 64, 0.4);
+  border-radius: 8px;
+}
+
+/* MapLibre tweaks */
+.maplibregl-ctrl-attrib {
+  font-size: 9px;
+  opacity: 0.5;
+}
+.maplibregl-canvas {
+  outline: none;
+}

@@ -1,0 +1,243 @@
+.topbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  padding-top: calc(10px + env(safe-area-inset-top));
+  background: linear-gradient(180deg, rgba(0, 10, 31, 0.92), rgba(0, 10, 31, 0));
+  pointer-events: none;
+}
+.topbar > * {
+  pointer-events: auto;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.brand img {
+  height: 34px;
+  width: auto;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5));
+}
+.brand-text {
+  line-height: 1.05;
+}
+.brand-text .name {
+  font-weight: 800;
+  font-size: 16px;
+  letter-spacing: 0.02em;
+}
+.brand-text .tag {
+  font-size: 11px;
+  color: var(--muted);
+}
+.spacer {
+  flex: 1;
+}
+.live {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 13px;
+}
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 0 rgba(163, 201, 64, 0.6);
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(163, 201, 64, 0.5); }
+  70% { box-shadow: 0 0 0 8px rgba(163, 201, 64, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(163, 201, 64, 0); }
+}
+.iconbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  font-size: 18px;
+}
+.iconbtn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Right drawer (flights / stats) */
+.drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(380px, 88vw);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  padding: calc(14px + env(safe-area-inset-top)) 14px 14px;
+  border-radius: 0;
+  transform: translateX(100%);
+  transition: transform 0.25s ease;
+}
+.drawer.open {
+  transform: translateX(0);
+}
+.drawer-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.tab {
+  flex: 1;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 14px;
+}
+.tab.active {
+  background: var(--surface-2);
+  color: var(--text);
+  border-color: var(--accent);
+}
+.drawer-close {
+  position: absolute;
+  top: calc(12px + env(safe-area-inset-top));
+  left: -52px;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  font-size: 20px;
+}
+
+/* Bottom detail sheet */
+.sheet {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 14px;
+  bottom: calc(14px + env(safe-area-inset-bottom));
+  width: min(460px, calc(100vw - 24px));
+  z-index: 7;
+  padding: 16px;
+  max-height: 60vh;
+}
+.sheet-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.callsign {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+.route {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0;
+  font-weight: 700;
+}
+.route .code {
+  font-size: 22px;
+}
+.route .arrow {
+  flex: 1;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent), transparent);
+  position: relative;
+}
+.route .arrow::after {
+  content: "✈";
+  position: absolute;
+  right: -2px;
+  top: -11px;
+  color: var(--accent);
+}
+.kv-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px 12px;
+  margin-top: 10px;
+}
+.kv .k {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.kv .v {
+  font-size: 16px;
+  font-weight: 700;
+}
+.muted {
+  color: var(--muted);
+}
+
+.list-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+}
+.list-row:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+.list-row.sel {
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+.list-row .cs {
+  font-weight: 700;
+}
+.list-row .sub {
+  font-size: 12px;
+  color: var(--muted);
+}
+.stat-card {
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(0, 10, 30, 0.4);
+}
+.stat-big {
+  font-size: 30px;
+  font-weight: 800;
+  color: var(--accent);
+}
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.setup-link {
+  position: absolute;
+  bottom: calc(10px + env(safe-area-inset-bottom));
+  left: 12px;
+  z-index: 4;
+  font-size: 12px;
+  color: var(--muted);
+  text-decoration: none;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(0, 10, 30, 0.5);
+}

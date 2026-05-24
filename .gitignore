@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Builds
+dist/
+build/
+*.tsbuildinfo
+
+# Env / secrets
+.env
+.env.local
+*.local
+secrets/
+
+# Runtime data
+data/
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Cloudflare tunnel credentials (never commit)
+infra/cloudflared/*.json
+!infra/cloudflared/*.example.json

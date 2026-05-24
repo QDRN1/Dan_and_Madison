@@ -1,0 +1,105 @@
+# QDRN Radar — full stack for a headless Raspberry Pi 4.
+#   ultrafeeder : RTL-SDR decode (readsb) + mlat + community feeds -> aircraft.json
+#   fr24feed    : feeds FlightRadar24 (earns the free Business plan)
+#   piaware     : feeds FlightAware  (earns the free Enterprise account)
+#   qdrn-radar  : our custom QDRN-themed app (map, detail, stats, setup, admin)
+#   cloudflared : exposes radar.qdrn.io/md + SSH via a Cloudflare Tunnel
+#
+# Copy .env.example -> .env and fill it in first.
+
+services:
+  ultrafeeder:
+    image: ghcr.io/sdr-enthusiasts/docker-adsb-ultrafeeder:latest
+    container_name: ultrafeeder
+    hostname: ultrafeeder
+    restart: unless-stopped
+    device_cgroup_rules:
+      - "c 189:* rwm"
+    ports:
+      - "8088:80" # tar1090 (raw/debug map) — optional, handy for troubleshooting
+    environment:
+      - TZ=${TZ:-America/New_York}
+      - READSB_DEVICE_TYPE=rtlsdr
+      - READSB_GAIN=autogain
+      - READSB_LAT=${FEEDER_LAT}
+      - READSB_LON=${FEEDER_LON}
+      - READSB_ALT=${FEEDER_ALT:-100m}
+      - READSB_RX_LOCATION_ACCURACY=2
+      - READSB_STATS_RANGE=true
+      - UUID=${ULTRAFEEDER_UUID}
+      # Feed the friendly community aggregators (free, gives global coverage back):
+      - ULTRAFEEDER_CONFIG=
+          adsb,feed.adsb.fi,30004,beast_reduce_plus_out;
+          adsb,in.adsb.lol,30004,beast_reduce_plus_out;
+          adsb,feed.airplanes.live,30004,beast_reduce_plus_out;
+          mlat,feed.adsb.fi,31090;
+          mlat,in.adsb.lol,31090;
+          mlat,feed.airplanes.live,31090
+    volumes:
+      - /dev/bus/usb:/dev/bus/usb
+      - uf_globe_history:/var/globe_history
+    tmpfs:
+      - /run:exec,size=256M
+      - /tmp:size=128M
+
+  fr24feed:
+    image: ghcr.io/sdr-enthusiasts/docker-flightradar24:latest
+    container_name: fr24feed
+    restart: unless-stopped
+    depends_on: [ultrafeeder]
+    environment:
+      - TZ=${TZ:-America/New_York}
+      - BEASTHOST=ultrafeeder
+      - BEASTPORT=30005
+      - FR24KEY=${FR24_SHARING_KEY}
+      - MLAT=yes
+
+  piaware:
+    image: ghcr.io/sdr-enthusiasts/docker-piaware:latest
+    container_name: piaware
+    restart: unless-stopped
+    depends_on: [ultrafeeder]
+    environment:
+      - TZ=${TZ:-America/New_York}
+      - BEASTHOST=ultrafeeder
+      - BEASTPORT=30005
+      - LAT=${FEEDER_LAT}
+      - LONG=${FEEDER_LON}
+      - FEEDER_ID=${PIAWARE_FEEDER_ID}
+
+  qdrn-radar:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    image: qdrn-radar:latest
+    container_name: qdrn-radar
+    restart: unless-stopped
+    depends_on: [ultrafeeder]
+    environment:
+      - NODE_ENV=production
+      - BASE_PATH=${BASE_PATH:-/md}
+      - PORT=8080
+      - AIRCRAFT_JSON_URL=http://ultrafeeder/data/aircraft.json
+      - MAP_STYLE_URL=${MAP_STYLE_URL:-https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json}
+      - RECEIVER_LAT=${RECEIVER_LAT}
+      - RECEIVER_LON=${RECEIVER_LON}
+      - RECEIVER_CITY=${RECEIVER_CITY}
+      - RANGE_RINGS_NM=${RANGE_RINGS_NM:-50,100,150}
+      - SETUP_PIN=${SETUP_PIN:-1234}
+      - ADMIN_EMAILS=${ADMIN_EMAILS}
+    volumes:
+      - ./data:/app/data
+      # Lets the admin console inspect/restart sibling containers (read-only-ish).
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CF_TUNNEL_TOKEN}
+    depends_on: [qdrn-radar]
+
+volumes:
+  uf_globe_history:

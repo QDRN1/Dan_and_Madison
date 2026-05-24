@@ -1,0 +1,21 @@
+{
+  "name": "qdrn-radar",
+  "version": "0.1.0",
+  "private": true,
+  "description": "QDRN Radar — a custom, mobile-first ADS-B aircraft tracker for a headless Raspberry Pi.",
+  "license": "UNLICENSED",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "npm run build --workspace @qdrn/shared && npm run build --workspace @qdrn/web && npm run build --workspace @qdrn/server",
+    "dev": "npm run dev --workspace @qdrn/server",
+    "dev:web": "npm run dev --workspace @qdrn/web",
+    "start": "node apps/server/dist/index.js",
+    "typecheck": "tsc -b packages/shared apps/server apps/web"
+  }
+}

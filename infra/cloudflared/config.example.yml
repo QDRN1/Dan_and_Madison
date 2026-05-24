@@ -1,0 +1,28 @@
+# Cloudflare Tunnel ingress (credentials-file mode).
+#
+# You can run the tunnel EITHER with a token (simplest — see docker-compose.yml,
+# set CF_TUNNEL_TOKEN, and configure public hostnames in the Zero Trust
+# dashboard) OR with this config file + a credentials JSON. This file documents
+# the credentials-file approach.
+#
+# 1) cloudflared tunnel login
+# 2) cloudflared tunnel create qdrn-radar
+#    -> writes <TUNNEL_ID>.json (the credentials). Keep it secret; never commit.
+# 3) cloudflared tunnel route dns qdrn-radar radar.qdrn.io
+#    cloudflared tunnel route dns qdrn-radar ssh.radar.qdrn.io
+# 4) Copy this file to config.yml and fill in the IDs/paths.
+
+tunnel: <TUNNEL_ID>
+credentials-file: /etc/cloudflared/<TUNNEL_ID>.json
+
+ingress:
+  # Public site — the whole app lives under radar.qdrn.io/md (BASE_PATH).
+  - hostname: radar.qdrn.io
+    service: http://qdrn-radar:8080
+
+  # Remote SSH to the Pi over the tunnel (connect with: cloudflared access ssh).
+  - hostname: ssh.radar.qdrn.io
+    service: ssh://localhost:22
+
+  # Required catch-all.
+  - service: http_status:404

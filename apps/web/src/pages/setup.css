@@ -1,0 +1,177 @@
+.setup {
+  min-height: 100%;
+  background: var(--bg-grad);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: calc(20px + env(safe-area-inset-top)) 16px calc(20px + env(safe-area-inset-bottom));
+}
+.setup-card {
+  width: 100%;
+  max-width: 480px;
+  padding: 22px;
+  margin-top: auto;
+  margin-bottom: auto;
+}
+.setup-logo {
+  height: 40px;
+  display: block;
+  margin: 0 auto 18px;
+}
+
+/* CaptainQ guide */
+.captain {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+.captain-avatar {
+  width: 56px;
+  height: 56px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--qdrn-white);
+  padding: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  object-fit: contain;
+}
+.bubble {
+  position: relative;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  border-top-left-radius: 4px;
+  padding: 12px 14px;
+  font-size: 15px;
+  line-height: 1.45;
+}
+.bubble .who {
+  font-weight: 800;
+  color: var(--accent);
+  font-size: 13px;
+  display: block;
+  margin-bottom: 3px;
+}
+
+.steps-dots {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  margin: 4px 0 18px;
+}
+.steps-dots .d {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+}
+.steps-dots .d.on {
+  background: var(--accent);
+}
+.steps-dots .d.done {
+  background: var(--accent-2);
+}
+
+.step-title {
+  font-size: 21px;
+  font-weight: 800;
+  margin: 0 0 4px;
+}
+.step-sub {
+  color: var(--muted);
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.row {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+}
+.row .btn {
+  flex: 1;
+}
+
+.helplink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 14px;
+  font-weight: 700;
+}
+.steplist {
+  margin: 10px 0;
+  padding-left: 18px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
+}
+.geo-results {
+  margin-top: 8px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.geo-results button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 11px 12px;
+  background: rgba(0, 10, 30, 0.5);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: 14px;
+}
+.geo-results button:hover {
+  background: var(--surface-2);
+}
+.status-ok {
+  color: var(--accent);
+  font-weight: 700;
+}
+.pin-dots {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin: 18px 0;
+}
+.pin-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--muted);
+}
+.pin-dot.filled {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  max-width: 280px;
+  margin: 0 auto;
+}
+.keypad button {
+  aspect-ratio: 1.6;
+  font-size: 22px;
+  font-weight: 700;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+}
+.connected-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(163, 201, 64, 0.14);
+  color: var(--accent);
+  font-weight: 700;
+  margin: 8px 0;
+}
