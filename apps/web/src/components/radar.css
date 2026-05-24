@@ -20,22 +20,31 @@
   align-items: center;
   gap: 10px;
 }
-.brand img {
-  height: 34px;
+.brand-plate {
+  display: inline-flex;
+  align-items: center;
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 5px 10px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+}
+.brand-plate img {
+  height: 26px;
   width: auto;
-  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5));
+  display: block;
 }
-.brand-text {
-  line-height: 1.05;
-}
-.brand-text .name {
-  font-weight: 800;
-  font-size: 16px;
-  letter-spacing: 0.02em;
-}
-.brand-text .tag {
-  font-size: 11px;
+.brand-sub {
+  font-size: 12px;
   color: var(--muted);
+  font-weight: 600;
+}
+@media (max-width: 480px) {
+  .brand-sub {
+    display: none;
+  }
+  .brand-plate img {
+    height: 22px;
+  }
 }
 .spacer {
   flex: 1;

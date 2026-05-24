@@ -159,6 +159,8 @@ export interface BrandConfig {
   name: string; // "QDRN Radar"
   tagline?: string;
   logoUrl?: string;
+  /** CaptainQ mascot icon, used in the setup wizard. */
+  captainUrl?: string;
   colors: {
     bg: string;
     surface: string;

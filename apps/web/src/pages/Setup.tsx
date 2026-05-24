@@ -3,12 +3,13 @@ import "./setup.css";
 import { BASE, api, geocodeCity, type GeoResult } from "../api";
 import { useRadar } from "../store";
 
-const CAPTAIN_AVATAR = `${BASE}/brand/captainq.svg`;
+const CAPTAIN_AVATAR = `${BASE}/brand/CaptainQIcon-BGRVD.PNG`;
 
 function CaptainQ({ children }: { children: ReactNode }): JSX.Element {
+  const captainUrl = useRadar((s) => s.config?.brand.captainUrl) ?? CAPTAIN_AVATAR;
   return (
     <div className="captain">
-      <img className="captain-avatar" src={CAPTAIN_AVATAR} alt="CaptainQ" onError={(e) => (e.currentTarget.style.visibility = "hidden")} />
+      <img className="captain-avatar" src={captainUrl} alt="CaptainQ" onError={(e) => (e.currentTarget.style.visibility = "hidden")} />
       <div className="bubble">
         <span className="who">CaptainQ</span>
         {children}

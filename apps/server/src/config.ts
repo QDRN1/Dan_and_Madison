@@ -110,7 +110,8 @@ export function getBrand(): BrandConfig {
   return {
     name: "QDRN Radar",
     tagline: "Live aircraft over the area",
-    logoUrl: `${BASE_PATH}/brand/logo.svg`,
+    logoUrl: `${BASE_PATH}/brand/QDRN%20Radar%20Long.png`,
+    captainUrl: `${BASE_PATH}/brand/CaptainQIcon-BGRVD.PNG`,
     colors: {
       bg: "#001533", // deep navy, derived from brand blue
       surface: "#002D72", // QDRN dark blue

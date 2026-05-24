@@ -22,11 +22,10 @@ export function RadarView(): JSX.Element {
 
       <header className="topbar">
         <div className="brand">
-          {brand?.logoUrl && <img src={brand.logoUrl} alt="QDRN" onError={(e) => (e.currentTarget.style.display = "none")} />}
-          <div className="brand-text">
-            <div className="name">{brand?.name ?? "QDRN Radar"}</div>
-            <div className="tag">{config?.receiver.city ? `Live over ${config.receiver.city}` : brand?.tagline}</div>
-          </div>
+          <span className="brand-plate">
+            {brand?.logoUrl && <img src={brand.logoUrl} alt={brand?.name ?? "QDRN Radar"} onError={(e) => (e.currentTarget.style.display = "none")} />}
+          </span>
+          {config?.receiver.city && <span className="brand-sub">Live over {config.receiver.city}</span>}
         </div>
         <div className="spacer" />
         <div className="live glass">

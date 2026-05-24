@@ -14,9 +14,15 @@
   margin-bottom: auto;
 }
 .setup-logo {
-  height: 40px;
   display: block;
+  height: auto;
+  width: auto;
+  max-width: 240px;
   margin: 0 auto 18px;
+  background: #fff;
+  padding: 9px 16px;
+  border-radius: 12px;
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.3);
 }
 
 /* CaptainQ guide */
