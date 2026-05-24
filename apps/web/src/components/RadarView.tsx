@@ -6,6 +6,7 @@ import { MapView } from "./MapView";
 import { AircraftDetail } from "./AircraftDetail";
 import { FlightList } from "./FlightList";
 import { StatsPanel } from "./StatsPanel";
+import { ThemeToggle } from "./ThemeToggle";
 
 type Tab = "none" | "flights" | "stats";
 
@@ -31,6 +32,7 @@ export function RadarView(): JSX.Element {
         <div className="live glass">
           <span className="dot" /> {count} <span className="muted" style={{ fontWeight: 600 }}>tracking</span>
         </div>
+        <ThemeToggle className="glass" />
         <button
           className={`iconbtn glass${tab === "flights" ? " active" : ""}`}
           onClick={() => setTab(tab === "flights" ? "none" : "flights")}

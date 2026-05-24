@@ -7,23 +7,50 @@
   --qdrn-black: #000000;
   --qdrn-gray: #f0f0f0;
 
-  --bg: #001533;
-  --bg-grad: radial-gradient(1200px 800px at 70% -10%, #003a8f 0%, #001533 55%, #000a1f 100%);
-  --surface: rgba(0, 45, 114, 0.55);
-  --surface-solid: #022150;
-  --surface-2: rgba(0, 45, 114, 0.8);
-  --border: rgba(163, 201, 64, 0.18);
-  --accent: var(--qdrn-green);
-  --accent-2: #5b8def;
-  --text: var(--qdrn-gray);
-  --muted: #9fb0c9;
-  --danger: #ff4d4d;
-  --warn: #ffb300;
-
-  --shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
+  --shadow: 0 10px 40px rgba(10, 30, 60, 0.16);
   --radius: 14px;
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  /* ── LIGHT THEME (default) ── */
+  --bg: #eef1f6;
+  --bg-grad: radial-gradient(1200px 800px at 70% -10%, #e2eaf8 0%, #eef1f6 55%, #e6ebf3 100%);
+  --topbar-grad: linear-gradient(180deg, rgba(238, 241, 246, 0.96), rgba(238, 241, 246, 0));
+  --surface: rgba(255, 255, 255, 0.84);
+  --surface-2: #ffffff;
+  --surface-solid: #ffffff;
+  --border: rgba(0, 45, 114, 0.16);
+  --accent: var(--qdrn-green);
+  --accent-2: #002d72;
+  --text: #0b1b33;
+  --muted: #5b6b80;
+  --danger: #d12d2d;
+  --warn: #b8791f;
+  --hover: rgba(0, 45, 114, 0.06);
+  --input-bg: #ffffff;
+  --code-bg: #0b1b33;
+  --code-fg: #cfe0f5;
+}
+
+:root[data-theme="dark"] {
+  --shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
+  --bg: #001533;
+  --bg-grad: radial-gradient(1200px 800px at 70% -10%, #003a8f 0%, #001533 55%, #000a1f 100%);
+  --topbar-grad: linear-gradient(180deg, rgba(0, 10, 31, 0.92), rgba(0, 10, 31, 0));
+  --surface: rgba(0, 45, 114, 0.55);
+  --surface-2: rgba(0, 45, 114, 0.8);
+  --surface-solid: #022150;
+  --border: rgba(163, 201, 64, 0.18);
+  --accent: var(--qdrn-green);
+  --accent-2: #5b8def;
+  --text: #f0f0f0;
+  --muted: #9fb0c9;
+  --danger: #ff4d4d;
+  --warn: #ffb300;
+  --hover: rgba(255, 255, 255, 0.04);
+  --input-bg: rgba(0, 10, 30, 0.6);
+  --code-bg: rgba(0, 0, 0, 0.4);
+  --code-fg: #cfe0f5;
 }
 
 * {
@@ -43,6 +70,7 @@ body {
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
   overscroll-behavior: none;
+  transition: background 0.25s ease, color 0.25s ease;
 }
 
 button {
@@ -51,7 +79,7 @@ button {
 }
 
 a {
-  color: var(--accent);
+  color: var(--accent-2);
 }
 
 /* Glass panel */
@@ -94,7 +122,7 @@ a {
   padding: 14px 16px;
   border-radius: 12px;
   border: 1px solid var(--border);
-  background: rgba(0, 10, 30, 0.6);
+  background: var(--input-bg);
   color: var(--text);
   font-size: 16px; /* 16px avoids iOS zoom-on-focus */
 }
@@ -120,15 +148,18 @@ a {
   border-radius: 999px;
   font-size: 12px;
   font-weight: 700;
-  background: rgba(163, 201, 64, 0.16);
+  background: rgba(163, 201, 64, 0.18);
+  color: #5f7d12;
+}
+:root[data-theme="dark"] .pill {
   color: var(--accent);
 }
 .pill.warn {
-  background: rgba(255, 179, 0, 0.16);
+  background: rgba(255, 179, 0, 0.18);
   color: var(--warn);
 }
 .pill.danger {
-  background: rgba(255, 77, 77, 0.16);
+  background: rgba(255, 77, 77, 0.18);
   color: var(--danger);
 }
 
@@ -145,8 +176,22 @@ a {
   width: 8px;
 }
 .scroll::-webkit-scrollbar-thumb {
-  background: rgba(163, 201, 64, 0.4);
+  background: rgba(163, 201, 64, 0.5);
   border-radius: 8px;
+}
+
+/* Theme toggle */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 18px;
 }
 
 /* MapLibre tweaks */

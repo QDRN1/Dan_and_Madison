@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import "./setup.css";
 import { BASE, api, geocodeCity, type GeoResult } from "../api";
 import { useRadar } from "../store";
+import { ThemeToggle } from "../components/ThemeToggle";
 
 const CAPTAIN_AVATAR = `${BASE}/brand/CaptainQIcon-BGRVD.PNG`;
 
@@ -41,6 +42,7 @@ export function Setup(): JSX.Element {
   if (!unlocked) {
     return (
       <div className="setup">
+        <div className="page-toggle"><ThemeToggle className="glass" /></div>
         <div className="glass setup-card">
           <img className="setup-logo" src={config?.brand.logoUrl ?? `${BASE}/brand/logo.svg`} alt="QDRN" onError={(e) => (e.currentTarget.style.display = "none")} />
           <CaptainQ>
@@ -63,6 +65,7 @@ export function Setup(): JSX.Element {
 
   return (
     <div className="setup">
+      <div className="page-toggle"><ThemeToggle className="glass" /></div>
       <div className="glass setup-card">
         <img className="setup-logo" src={config?.brand.logoUrl ?? `${BASE}/brand/logo.svg`} alt="QDRN" onError={(e) => (e.currentTarget.style.display = "none")} />
         <div className="steps-dots">

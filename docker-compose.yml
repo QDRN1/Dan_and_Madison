@@ -89,7 +89,8 @@ services:
       - BASE_PATH=${BASE_PATH:-/md}
       - PORT=8080
       - AIRCRAFT_JSON_URL=http://ultrafeeder/data/aircraft.json
-      - MAP_STYLE_URL=${MAP_STYLE_URL:-https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json}
+      - MAP_STYLE_URL_LIGHT=${MAP_STYLE_URL_LIGHT:-https://basemaps.cartocdn.com/gl/positron-gl-style/style.json}
+      - MAP_STYLE_URL_DARK=${MAP_STYLE_URL_DARK:-https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json}
       - RECEIVER_LAT=${RECEIVER_LAT}
       - RECEIVER_LON=${RECEIVER_LON}
       - RECEIVER_CITY=${RECEIVER_CITY}

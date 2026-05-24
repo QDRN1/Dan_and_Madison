@@ -1,3 +1,9 @@
+.page-toggle {
+  position: fixed;
+  top: calc(12px + env(safe-area-inset-top));
+  right: 14px;
+  z-index: 10;
+}
 .setup {
   min-height: 100%;
   background: var(--bg-grad);
@@ -125,7 +131,7 @@
   width: 100%;
   text-align: left;
   padding: 11px 12px;
-  background: rgba(0, 10, 30, 0.5);
+  background: var(--input-bg);
   border: none;
   border-bottom: 1px solid var(--border);
   color: var(--text);

@@ -25,9 +25,13 @@ export const AIRCRAFT_JSON_URL = env(
   "AIRCRAFT_JSON_URL",
   "http://ultrafeeder/data/aircraft.json",
 );
-export const MAP_STYLE_URL = env(
-  "MAP_STYLE_URL",
-  "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
+export const MAP_STYLE_DARK = env(
+  "MAP_STYLE_URL_DARK",
+  env("MAP_STYLE_URL", "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"),
+);
+export const MAP_STYLE_LIGHT = env(
+  "MAP_STYLE_URL_LIGHT",
+  "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
 );
 
 export const ADSBDB_BASE = env("ADSBDB_BASE", "https://api.adsbdb.com/v0");

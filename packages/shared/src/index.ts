@@ -150,7 +150,7 @@ export interface FlaggedSighting {
 export interface PublicConfig {
   basePath: string;
   receiver: ReceiverInfo;
-  mapStyleUrl: string;
+  mapStyle: { light: string; dark: string };
   brand: BrandConfig;
   setup: SetupState;
 }

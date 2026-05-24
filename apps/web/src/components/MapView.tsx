@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import maplibregl, { type GeoJSONSource, type Map as MlMap } from "maplibre-gl";
 import type { FeatureCollection } from "geojson";
-import { useRadar } from "../store";
+import { useRadar, type Theme } from "../store";
 import { altColor, altFeet } from "../format";
 
 function makePlaneImage(): { data: Uint8ClampedArray; width: number; height: number } {
@@ -38,76 +38,75 @@ function ringCoords(lon: number, lat: number, nm: number): [number, number][] {
   return pts;
 }
 
+function mapColors(t: Theme): { label: string; halo: string; marker: string } {
+  return t === "dark"
+    ? { label: "#F0F0F0", halo: "#001533", marker: "#001533" }
+    : { label: "#0b1b33", halo: "#ffffff", marker: "#ffffff" };
+}
+
+function emptyFc(): FeatureCollection {
+  return { type: "FeatureCollection", features: [] };
+}
+
 export function MapView(): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
   const readyRef = useRef(false);
+  const handlersRef = useRef(false);
+  const appliedThemeRef = useRef<Theme | null>(null);
 
   const config = useRadar((s) => s.config);
   const aircraft = useRadar((s) => s.aircraft);
   const selectedHex = useRadar((s) => s.selectedHex);
   const selectedTrail = useRadar((s) => s.selectedTrail);
   const select = useRadar((s) => s.select);
+  const theme = useRadar((s) => s.theme);
 
-  // Init map once config (style url + receiver) is available.
-  useEffect(() => {
-    if (!config || mapRef.current || !containerRef.current) return;
+  // Adds our sources + layers on top of whatever basemap style is loaded.
+  // Idempotent: after a style switch the custom sources are gone, so we re-add.
+  function installLayers(map: MlMap, t: Theme): void {
+    if (!config) return;
     const { receiver } = config;
-    const map = new maplibregl.Map({
-      container: containerRef.current,
-      style: config.mapStyleUrl,
-      center: [receiver.lon, receiver.lat],
-      zoom: 8,
-      attributionControl: { compact: true },
-    });
-    map.addControl(new maplibregl.NavigationControl({ showCompass: true }), "bottom-right");
-    map.touchZoomRotate.disableRotation();
-    mapRef.current = map;
+    const col = mapColors(t);
 
-    map.on("load", () => {
-      if (!map.hasImage("plane")) {
-        map.addImage("plane", makePlaneImage(), { sdf: true, pixelRatio: 4 });
-      }
+    if (!map.hasImage("plane")) map.addImage("plane", makePlaneImage(), { sdf: true, pixelRatio: 4 });
 
-      // Range rings + receiver marker
-      const ringFeatures: FeatureCollection = {
-        type: "FeatureCollection",
-        features: receiver.rangeRingsNm.map((nm) => ({
-          type: "Feature",
-          properties: { nm },
-          geometry: { type: "LineString", coordinates: ringCoords(receiver.lon, receiver.lat, nm) },
-        })),
-      };
-      map.addSource("rings", { type: "geojson", data: ringFeatures });
+    if (!map.getSource("rings")) {
+      map.addSource("rings", {
+        type: "geojson",
+        data: {
+          type: "FeatureCollection",
+          features: receiver.rangeRingsNm.map((nm) => ({
+            type: "Feature",
+            properties: { nm },
+            geometry: { type: "LineString", coordinates: ringCoords(receiver.lon, receiver.lat, nm) },
+          })),
+        },
+      });
+    }
+    if (!map.getLayer("rings")) {
       map.addLayer({
         id: "rings",
         type: "line",
         source: "rings",
-        paint: {
-          "line-color": "#a3c940",
-          "line-opacity": 0.25,
-          "line-width": 1,
-          "line-dasharray": [3, 3],
-        },
+        paint: { "line-color": "#a3c940", "line-opacity": 0.3, "line-width": 1, "line-dasharray": [3, 3] },
       });
-      map.addSource("receiver", {
-        type: "geojson",
-        data: { type: "Point", coordinates: [receiver.lon, receiver.lat] },
-      });
+    }
+
+    if (!map.getSource("receiver")) {
+      map.addSource("receiver", { type: "geojson", data: { type: "Point", coordinates: [receiver.lon, receiver.lat] } });
+    }
+    if (!map.getLayer("receiver")) {
       map.addLayer({
         id: "receiver",
         type: "circle",
         source: "receiver",
-        paint: {
-          "circle-radius": 6,
-          "circle-color": "#a3c940",
-          "circle-stroke-color": "#001533",
-          "circle-stroke-width": 2,
-        },
+        paint: { "circle-radius": 6, "circle-color": "#a3c940", "circle-stroke-color": col.marker, "circle-stroke-width": 2 },
       });
+    }
 
-      // Selected aircraft trail (altitude-colored segments)
-      map.addSource("trail", { type: "geojson", data: emptyFc() });
+    if (!map.getSource("trail")) map.addSource("trail", { type: "geojson", data: emptyFc() });
+    if (!map.getLayer("trail-glow")) {
       map.addLayer({
         id: "trail-glow",
         type: "line",
@@ -115,6 +114,8 @@ export function MapView(): JSX.Element {
         layout: { "line-cap": "round", "line-join": "round" },
         paint: { "line-color": "#a3c940", "line-width": 7, "line-opacity": 0.18, "line-blur": 4 },
       });
+    }
+    if (!map.getLayer("trail")) {
       map.addLayer({
         id: "trail",
         type: "line",
@@ -122,9 +123,10 @@ export function MapView(): JSX.Element {
         layout: { "line-cap": "round", "line-join": "round" },
         paint: { "line-color": ["get", "color"], "line-width": 2.6, "line-opacity": 0.9 },
       });
+    }
 
-      // Aircraft
-      map.addSource("aircraft", { type: "geojson", data: emptyFc() });
+    if (!map.getSource("aircraft")) map.addSource("aircraft", { type: "geojson", data: emptyFc() });
+    if (!map.getLayer("ac-highlight")) {
       map.addLayer({
         id: "ac-highlight",
         type: "circle",
@@ -137,6 +139,8 @@ export function MapView(): JSX.Element {
           "circle-stroke-width": 2,
         },
       });
+    }
+    if (!map.getLayer("ac-plane")) {
       map.addLayer({
         id: "ac-plane",
         type: "symbol",
@@ -151,6 +155,8 @@ export function MapView(): JSX.Element {
         },
         paint: { "icon-color": ["get", "color"] },
       });
+    }
+    if (!map.getLayer("ac-label")) {
       map.addLayer({
         id: "ac-label",
         type: "symbol",
@@ -164,42 +170,26 @@ export function MapView(): JSX.Element {
           "text-optional": true,
           "text-allow-overlap": false,
         },
-        paint: {
-          "text-color": "#F0F0F0",
-          "text-halo-color": "#001533",
-          "text-halo-width": 1.3,
-        },
+        paint: { "text-color": col.label, "text-halo-color": col.halo, "text-halo-width": 1.3 },
       });
+    }
+  }
 
-      readyRef.current = true;
-      updateSource();
-      updateTrail();
-
-      map.on("click", "ac-plane", (e) => {
-        const f = e.features?.[0];
-        const hex = f?.properties?.hex as string | undefined;
-        if (hex) select(hex);
-      });
-      map.on("click", (e) => {
-        const hits = map.queryRenderedFeatures(e.point, { layers: ["ac-plane"] });
-        if (hits.length === 0) select(null);
-      });
-      for (const layer of ["ac-plane", "ac-highlight"]) {
-        map.on("mouseenter", layer, () => (map.getCanvas().style.cursor = "pointer"));
-        map.on("mouseleave", layer, () => (map.getCanvas().style.cursor = ""));
-      }
+  function attachHandlers(map: MlMap): void {
+    if (handlersRef.current) return;
+    handlersRef.current = true;
+    map.on("click", "ac-plane", (e) => {
+      const hex = e.features?.[0]?.properties?.hex as string | undefined;
+      if (hex) select(hex);
     });
-
-    return () => {
-      map.remove();
-      mapRef.current = null;
-      readyRef.current = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config]);
-
-  function emptyFc(): FeatureCollection {
-    return { type: "FeatureCollection", features: [] };
+    map.on("click", (e) => {
+      const hits = map.queryRenderedFeatures(e.point, { layers: ["ac-plane"] });
+      if (hits.length === 0) select(null);
+    });
+    for (const layer of ["ac-plane", "ac-highlight"]) {
+      map.on("mouseenter", layer, () => (map.getCanvas().style.cursor = "pointer"));
+      map.on("mouseleave", layer, () => (map.getCanvas().style.cursor = ""));
+    }
   }
 
   function updateSource(): void {
@@ -207,9 +197,10 @@ export function MapView(): JSX.Element {
     if (!map || !readyRef.current) return;
     const src = map.getSource("aircraft") as GeoJSONSource | undefined;
     if (!src) return;
-    const fc: FeatureCollection = {
+    const cur = useRadar.getState();
+    src.setData({
       type: "FeatureCollection",
-      features: aircraft
+      features: cur.aircraft
         .filter((a) => a.lon != null && a.lat != null)
         .map((a) => ({
           type: "Feature",
@@ -218,12 +209,11 @@ export function MapView(): JSX.Element {
             flight: a.flight?.trim() ?? "",
             track: a.track ?? 0,
             color: altColor(altFeet(a)),
-            selected: a.hex === selectedHex ? 1 : 0,
+            selected: a.hex === cur.selectedHex ? 1 : 0,
           },
           geometry: { type: "Point", coordinates: [a.lon!, a.lat!] },
         })),
-    };
-    src.setData(fc);
+    });
   }
 
   function updateTrail(): void {
@@ -231,7 +221,7 @@ export function MapView(): JSX.Element {
     if (!map || !readyRef.current) return;
     const src = map.getSource("trail") as GeoJSONSource | undefined;
     if (!src) return;
-    const pts = selectedTrail ?? [];
+    const pts = useRadar.getState().selectedTrail ?? [];
     const features: FeatureCollection["features"] = [];
     for (let i = 1; i < pts.length; i++) {
       const a = pts[i - 1]!;
@@ -245,7 +235,61 @@ export function MapView(): JSX.Element {
     src.setData({ type: "FeatureCollection", features });
   }
 
-  // Push new aircraft / selection to the map.
+  // Create the map once config is available.
+  useEffect(() => {
+    if (!config || mapRef.current || !containerRef.current) return;
+    const { receiver } = config;
+    const t = useRadar.getState().theme;
+    appliedThemeRef.current = t;
+    const map = new maplibregl.Map({
+      container: containerRef.current,
+      style: config.mapStyle[t],
+      center: [receiver.lon, receiver.lat],
+      zoom: 8,
+      attributionControl: { compact: true },
+    });
+    map.addControl(new maplibregl.NavigationControl({ showCompass: true }), "bottom-right");
+    map.touchZoomRotate.disableRotation();
+    mapRef.current = map;
+
+    map.on("load", () => {
+      installLayers(map, useRadar.getState().theme);
+      attachHandlers(map);
+      readyRef.current = true;
+      updateSource();
+      updateTrail();
+    });
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+      readyRef.current = false;
+      handlersRef.current = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config]);
+
+  // Switch basemap on theme change, then re-add our layers + data.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !config) return;
+    if (appliedThemeRef.current === theme) return;
+    appliedThemeRef.current = theme;
+    readyRef.current = false;
+    map.setStyle(config.mapStyle[theme]);
+    const onStyle = () => {
+      if (!map.isStyleLoaded()) return;
+      map.off("styledata", onStyle);
+      installLayers(map, theme);
+      readyRef.current = true;
+      updateSource();
+      updateTrail();
+    };
+    map.on("styledata", onStyle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [theme, config]);
+
+  // Push live aircraft / selection to the map.
   useEffect(() => {
     updateSource();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -262,9 +306,7 @@ export function MapView(): JSX.Element {
     const map = mapRef.current;
     if (!map || !selectedHex) return;
     const a = aircraft.find((x) => x.hex === selectedHex);
-    if (a?.lon != null && a?.lat != null) {
-      map.easeTo({ center: [a.lon, a.lat], duration: 600 });
-    }
+    if (a?.lon != null && a?.lat != null) map.easeTo({ center: [a.lon, a.lat], duration: 600 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedHex]);
 

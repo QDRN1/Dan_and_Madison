@@ -2,7 +2,8 @@ import type { FastifyInstance } from "fastify";
 import type { PublicConfig, SetupState } from "@qdrn/shared";
 import {
   BASE_PATH,
-  MAP_STYLE_URL,
+  MAP_STYLE_DARK,
+  MAP_STYLE_LIGHT,
   getApiKeys,
   getBrand,
   getReceiver,
@@ -39,7 +40,7 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
   app.get("/config", async (): Promise<PublicConfig> => ({
     basePath: BASE_PATH,
     receiver: getReceiver(),
-    mapStyleUrl: MAP_STYLE_URL,
+    mapStyle: { light: MAP_STYLE_LIGHT, dark: MAP_STYLE_DARK },
     brand: getBrand(),
     setup: setupState(),
   }));

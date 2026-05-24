@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ServiceStatus } from "@qdrn/shared";
 import { BASE } from "../api";
+import { ThemeToggle } from "../components/ThemeToggle";
 
 const ADMIN = `${BASE}/admin/api`;
 
@@ -52,6 +53,8 @@ export function Admin(): JSX.Element {
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
           <h1 style={{ margin: 0, fontSize: 22 }}>QDRN Radar · Admin Console</h1>
           <span className="pill">hidden</span>
+          <div style={{ flex: 1 }} />
+          <ThemeToggle />
         </div>
         <p className="muted" style={{ marginTop: 0 }}>
           {whoami ? `Signed in via Cloudflare Access as ${whoami}` : "Protected by Cloudflare Access"}
@@ -85,7 +88,7 @@ export function Admin(): JSX.Element {
         {logName && (
           <div className="glass" style={{ padding: 18, marginTop: 16 }}>
             <h2 style={{ marginTop: 0, fontSize: 16 }}>Logs · {logName}</h2>
-            <pre className="mono scroll" style={{ maxHeight: 360, overflow: "auto", fontSize: 12, background: "rgba(0,0,0,0.4)", padding: 12, borderRadius: 8 }}>
+            <pre className="mono scroll" style={{ maxHeight: 360, overflow: "auto", fontSize: 12, background: "var(--code-bg)", color: "var(--code-fg)", padding: 12, borderRadius: 8 }}>
               {logs}
             </pre>
           </div>

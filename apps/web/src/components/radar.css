@@ -9,7 +9,7 @@
   gap: 12px;
   padding: 10px 14px;
   padding-top: calc(10px + env(safe-area-inset-top));
-  background: linear-gradient(180deg, rgba(0, 10, 31, 0.92), rgba(0, 10, 31, 0));
+  background: var(--topbar-grad);
   pointer-events: none;
 }
 .topbar > * {
@@ -207,7 +207,7 @@
   border: 1px solid transparent;
 }
 .list-row:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--hover);
 }
 .list-row.sel {
   border-color: var(--accent);
@@ -224,7 +224,7 @@
   padding: 14px;
   border-radius: 12px;
   border: 1px solid var(--border);
-  background: rgba(0, 10, 30, 0.4);
+  background: var(--input-bg);
 }
 .stat-big {
   font-size: 30px;
@@ -235,7 +235,7 @@
   display: flex;
   justify-content: space-between;
   padding: 7px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--border);
 }
 
 /* Aircraft photo (Planespotters) */
@@ -314,5 +314,6 @@
   text-decoration: none;
   padding: 6px 10px;
   border-radius: 8px;
-  background: rgba(0, 10, 30, 0.5);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
 }

@@ -17,7 +17,7 @@ function currentRoute(): Route {
 export function App(): JSX.Element {
   const setConfig = useRadar((s) => s.setConfig);
   const applySnapshot = useRadar((s) => s.applySnapshot);
-  const config = useRadar((s) => s.config);
+  const theme = useRadar((s) => s.theme);
   const [route, setRoute] = useState<Route>(currentRoute());
 
   useEffect(() => {
@@ -37,19 +37,17 @@ export function App(): JSX.Element {
     return disconnect;
   }, [route, applySnapshot]);
 
-  // Apply brand colors from server config as CSS variables (lets you re-skin
-  // without rebuilding).
+  // Apply + persist the light/dark theme globally.
   useEffect(() => {
-    if (!config) return;
-    const c = config.brand.colors;
-    const root = document.documentElement.style;
-    root.setProperty("--bg", c.bg);
-    root.setProperty("--surface", c.surface);
-    root.setProperty("--accent", c.accent);
-    root.setProperty("--accent-2", c.accent2);
-    root.setProperty("--text", c.text);
-    root.setProperty("--muted", c.muted);
-  }, [config]);
+    document.documentElement.dataset.theme = theme;
+    try {
+      localStorage.setItem("qdrn-theme", theme);
+    } catch {
+      /* ignore */
+    }
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", theme === "dark" ? "#001533" : "#eef1f6");
+  }, [theme]);
 
   if (route === "setup") return <Setup />;
   if (route === "admin") return <Admin />;
