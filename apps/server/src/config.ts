@@ -57,9 +57,10 @@ const SETTING_KEYS = {
 } as const;
 
 export function getReceiver(): ReceiverInfo {
-  const lat = Number(getSetting(SETTING_KEYS.receiverLat) ?? envNum("RECEIVER_LAT", 39.0458));
-  const lon = Number(getSetting(SETTING_KEYS.receiverLon) ?? envNum("RECEIVER_LON", -76.6413));
-  const city = getSetting(SETTING_KEYS.receiverCity) ?? env("RECEIVER_CITY", "Maryland");
+  // Defaults: north Minneapolis (city-level). Overridden during onboarding.
+  const lat = Number(getSetting(SETTING_KEYS.receiverLat) ?? envNum("RECEIVER_LAT", 45.03));
+  const lon = Number(getSetting(SETTING_KEYS.receiverLon) ?? envNum("RECEIVER_LON", -93.3));
+  const city = getSetting(SETTING_KEYS.receiverCity) ?? env("RECEIVER_CITY", "Minneapolis, MN");
   const ringsRaw = getSetting(SETTING_KEYS.rangeRings) ?? env("RANGE_RINGS_NM", "50,100,150");
   const rangeRingsNm = ringsRaw
     .split(",")

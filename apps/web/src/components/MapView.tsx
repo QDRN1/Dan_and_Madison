@@ -245,7 +245,7 @@ export function MapView(): JSX.Element {
       container: containerRef.current,
       style: config.mapStyle[t],
       center: [receiver.lon, receiver.lat],
-      zoom: 8,
+      zoom: 7,
       attributionControl: { compact: true },
     });
     map.addControl(new maplibregl.NavigationControl({ showCompass: true }), "bottom-right");
