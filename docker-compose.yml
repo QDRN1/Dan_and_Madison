@@ -101,6 +101,8 @@ services:
       - RANGE_RINGS_NM=${RANGE_RINGS_NM:-50,100,150}
       - SETUP_PIN=${SETUP_PIN:-1234}
       - ADMIN_EMAILS=${ADMIN_EMAILS}
+      - CF_ACCESS_TEAM_DOMAIN=${CF_ACCESS_TEAM_DOMAIN}
+      - CF_ACCESS_AUD=${CF_ACCESS_AUD}
       - FEEDER_ENV_PATH=/app/data/feeder.env
       - STACK_DIR=/app/stack
       - COMPOSE_PROJECT=qdrn-radar

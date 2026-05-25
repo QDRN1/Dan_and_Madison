@@ -42,6 +42,13 @@ export const ADMIN_EMAILS = env("ADMIN_EMAILS", "")
   .map((s) => s.trim().toLowerCase())
   .filter(Boolean);
 
+// Cloudflare Access (admin JWT verification). Team domain like
+// "qdrn.cloudflareaccess.com"; AUD is the admin Access application's audience tag.
+export const CF_ACCESS_TEAM_DOMAIN = env("CF_ACCESS_TEAM_DOMAIN", "")
+  .replace(/^https?:\/\//, "")
+  .replace(/\/+$/, "");
+export const CF_ACCESS_AUD = env("CF_ACCESS_AUD", "");
+
 // Settings that can be changed at runtime are persisted in the DB and override
 // the env defaults. Keys are stored in the DB only (never the repo / env in prod).
 const SETTING_KEYS = {

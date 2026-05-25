@@ -1,8 +1,9 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from "jose";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { ServiceName, ServiceStatus } from "@qdrn/shared";
-import { ADMIN_EMAILS, setSetupPin } from "../config.js";
+import { ADMIN_EMAILS, CF_ACCESS_AUD, CF_ACCESS_TEAM_DOMAIN, setSetupPin } from "../config.js";
 import { db } from "../db.js";
 import { applyFeeders } from "../feeder.js";
 
@@ -15,23 +16,52 @@ function isService(x: string): x is ServiceName {
   return (SERVICES as string[]).includes(x);
 }
 
+let jwks: JWTVerifyGetKey | null = null;
+function getJwks(): JWTVerifyGetKey | null {
+  if (!CF_ACCESS_TEAM_DOMAIN) return null;
+  if (!jwks) jwks = createRemoteJWKSet(new URL(`https://${CF_ACCESS_TEAM_DOMAIN}/cdn-cgi/access/certs`));
+  return jwks;
+}
+
+function accessToken(req: FastifyRequest): string | undefined {
+  const header = req.headers["cf-access-jwt-assertion"];
+  if (typeof header === "string" && header) return header;
+  const cookie = req.headers.cookie ?? "";
+  const m = /(?:^|;\s*)CF_Authorization=([^;]+)/.exec(cookie);
+  return m?.[1];
+}
+
 /**
- * Cloudflare Access sits in front of /admin at the edge and injects the
- * authenticated user's email. We re-check it here (defense in depth) and, when
- * ADMIN_EMAILS is set, enforce an allowlist. In dev we allow through.
+ * Verify the Cloudflare Access JWT (not just a spoofable header). The token is
+ * issued by your Access team for the admin application; we check its signature
+ * against the team JWKS, the audience tag, and the email allowlist. Fails closed
+ * in production if Access isn't configured. Dev is allowed through.
  */
-function requireCfAccess(req: FastifyRequest, reply: FastifyReply, done: (err?: Error) => void): void {
-  if (process.env.NODE_ENV !== "production") return done();
-  const email = String(req.headers["cf-access-authenticated-user-email"] ?? "").toLowerCase();
-  if (!email) {
-    reply.code(403).send({ error: "forbidden", detail: "No Cloudflare Access identity." });
-    return;
+async function requireCfAccess(req: FastifyRequest, reply: FastifyReply): Promise<void> {
+  if (process.env.NODE_ENV !== "production") return;
+
+  const keys = getJwks();
+  if (!keys || !CF_ACCESS_AUD) {
+    return reply.code(503).send({
+      error: "access_not_configured",
+      detail: "Set CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD so admin can verify Cloudflare Access.",
+    });
   }
-  if (ADMIN_EMAILS.length > 0 && !ADMIN_EMAILS.includes(email)) {
-    reply.code(403).send({ error: "forbidden", detail: "Not an authorized admin." });
-    return;
+  const token = accessToken(req);
+  if (!token) return reply.code(403).send({ error: "forbidden", detail: "No Cloudflare Access token." });
+
+  try {
+    const { payload } = await jwtVerify(token, keys, {
+      audience: CF_ACCESS_AUD,
+      issuer: `https://${CF_ACCESS_TEAM_DOMAIN}`,
+    });
+    const email = String(payload.email ?? "").toLowerCase();
+    if (ADMIN_EMAILS.length > 0 && !ADMIN_EMAILS.includes(email)) {
+      return reply.code(403).send({ error: "forbidden", detail: "Not an authorized admin." });
+    }
+  } catch {
+    return reply.code(403).send({ error: "forbidden", detail: "Invalid Cloudflare Access token." });
   }
-  done();
 }
 
 async function docker(args: string[]): Promise<string> {
