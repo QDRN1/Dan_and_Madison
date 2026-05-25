@@ -16,6 +16,17 @@ const cacheSet = db.prepare<[string, string, string, number]>(
 // In-flight de-duplication so we never hit a source twice for the same key.
 const inflight = new Map<string, Promise<Enrichment | undefined>>();
 
+/** Wipe cached enrichment so the next lookups re-fetch (e.g. after an API key
+ *  change, so newly-available sources like AeroAPI take effect immediately). */
+export function clearEnrichmentCache(): void {
+  try {
+    db.prepare("DELETE FROM enrichment_cache").run();
+  } catch {
+    /* ignore */
+  }
+  inflight.clear();
+}
+
 async function fetchJson(url: string, init?: RequestInit): Promise<any | undefined> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
@@ -187,11 +198,27 @@ async function hexdbAirport(icao: string): Promise<Airport | undefined> {
 // ─── FlightAware AeroAPI (paid, optional upgrade) ─────────────────────────────
 
 async function flightAwareRoute(callsign: string, apiKey: string): Promise<Route | undefined> {
-  const j = await fetchJson(
-    `https://aeroapi.flightaware.com/aeroapi/flights/${encodeURIComponent(callsign)}`,
-    { headers: { "x-apikey": apiKey, Accept: "application/json" } },
-  );
-  const f = j?.flights?.[0];
+  let j: any;
+  try {
+    const res = await fetch(`https://aeroapi.flightaware.com/aeroapi/flights/${encodeURIComponent(callsign)}`, {
+      headers: { "x-apikey": apiKey, Accept: "application/json" },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    if (!res.ok) {
+      // Surface the failure (esp. 401/403 = bad key) instead of silently
+      // falling back to the free sources, which looks identical to "still wrong".
+      console.warn(`[aeroapi] ${callsign} -> ${res.status} ${res.statusText}; falling back to free route data`);
+      return undefined;
+    }
+    j = await res.json();
+  } catch (e) {
+    console.warn(`[aeroapi] ${callsign} request failed:`, (e as Error)?.message ?? e);
+    return undefined;
+  }
+  const flights: any[] = Array.isArray(j?.flights) ? j.flights : [];
+  // Prefer the flight that's actually airborne now (departed, not yet landed)
+  // so we don't show a stale/scheduled leg for a reused flight number.
+  const f = flights.find((x) => x?.actual_off && !x?.actual_on) ?? flights[0];
   if (!f) return undefined;
   return {
     callsign,

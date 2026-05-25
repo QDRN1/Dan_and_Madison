@@ -13,7 +13,7 @@ import {
   setReceiver,
   setSetupPin,
 } from "../config.js";
-import { enrich } from "../enrichment.js";
+import { clearEnrichmentCache, enrich } from "../enrichment.js";
 import { applyFeedersInBackground, writeFeederEnv } from "../feeder.js";
 import { store } from "../poller.js";
 import { getStats } from "../stats.js";
@@ -113,10 +113,21 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
   }>("/setup/keys", async (req, reply) => {
     if (!pinOk(req.body?.pin)) return reply.code(401).send({ error: "bad_pin" });
     const b = req.body;
-    if (b.flightAwareAeroApi) setApiKey("flightAwareAeroApi", b.flightAwareAeroApi.trim());
+    let routeKeyChanged = false;
+    if (b.flightAwareAeroApi) {
+      setApiKey("flightAwareAeroApi", b.flightAwareAeroApi.trim());
+      routeKeyChanged = true;
+    }
     if (b.flightRadar24Token) setApiKey("flightRadar24Token", b.flightRadar24Token.trim());
     if (b.fr24SharingKey) setApiKey("fr24SharingKey", b.fr24SharingKey.trim());
     if (b.piawareFeederId) setApiKey("piawareFeederId", b.piawareFeederId.trim());
+
+    // A new route source (AeroAPI) only helps if we stop serving cached
+    // free-source routes — wipe the cache and re-enrich live aircraft.
+    if (routeKeyChanged) {
+      clearEnrichmentCache();
+      store.resetEnrichment();
+    }
 
     // Push feeder keys into the shared env file and recreate the feeder
     // containers in the background so feeding "just works" with no SSH.

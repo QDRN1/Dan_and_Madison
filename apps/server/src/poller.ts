@@ -64,6 +64,13 @@ class AircraftStore extends EventEmitter {
     return this.aircraft.get(hex);
   }
 
+  /** Drop attached enrichment so every aircraft re-enriches on the next poll
+   *  (used after an API key change so new sources apply right away). */
+  resetEnrichment(): void {
+    for (const ac of this.aircraft.values()) ac.enrichment = undefined;
+    this.enrichedFor.clear();
+  }
+
   getTrail(hex: string): TrailPoint[] {
     return this.trails.get(hex) ?? [];
   }
