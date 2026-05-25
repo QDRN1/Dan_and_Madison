@@ -44,6 +44,10 @@ function mapColors(t: Theme): { label: string; halo: string; marker: string } {
     : { label: "#0b1b33", halo: "#ffffff", marker: "#ffffff" };
 }
 
+// Radius of the soft "home area" circle (km). Large enough to cover the city
+// so the exact house isn't pinpointed.
+const HOME_AREA_NM = 7 / 1.852;
+
 function emptyFc(): FeatureCollection {
   return { type: "FeatureCollection", features: [] };
 }
@@ -93,28 +97,46 @@ export function MapView(): JSX.Element {
       });
     }
 
-    if (!map.getSource("receiver")) {
-      map.addSource("receiver", { type: "geojson", data: { type: "Point", coordinates: [receiver.lon, receiver.lat] } });
-    }
-    if (!map.getLayer("receiver-halo")) {
-      map.addLayer({
-        id: "receiver-halo",
-        type: "circle",
-        source: "receiver",
-        paint: {
-          "circle-radius": 22,
-          "circle-color": "rgba(163,201,64,0.18)",
-          "circle-stroke-color": "rgba(163,201,64,0.55)",
-          "circle-stroke-width": 1.5,
+    // Soft "home area" circle covering the city (not a pinpoint of the house).
+    if (!map.getSource("home-area")) {
+      map.addSource("home-area", {
+        type: "geojson",
+        data: {
+          type: "Feature",
+          properties: {},
+          geometry: { type: "Polygon", coordinates: [ringCoords(receiver.lon, receiver.lat, HOME_AREA_NM)] },
         },
       });
     }
-    if (!map.getLayer("receiver")) {
+    if (!map.getLayer("home-fill")) {
+      map.addLayer({ id: "home-fill", type: "fill", source: "home-area", paint: { "fill-color": "#a3c940", "fill-opacity": 0.12 } });
+    }
+    if (!map.getLayer("home-line")) {
       map.addLayer({
-        id: "receiver",
-        type: "circle",
-        source: "receiver",
-        paint: { "circle-radius": 9, "circle-color": "#a3c940", "circle-stroke-color": col.marker, "circle-stroke-width": 3 },
+        id: "home-line",
+        type: "line",
+        source: "home-area",
+        paint: { "line-color": "#a3c940", "line-opacity": 0.55, "line-width": 1.5 },
+      });
+    }
+
+    // City label at the center so "Minneapolis" is clearly shown.
+    if (!map.getSource("home-point")) {
+      map.addSource("home-point", { type: "geojson", data: { type: "Point", coordinates: [receiver.lon, receiver.lat] } });
+    }
+    if (!map.getLayer("home-label")) {
+      map.addLayer({
+        id: "home-label",
+        type: "symbol",
+        source: "home-point",
+        layout: {
+          "text-field": (config.receiver.city || "").split(",")[0] || "Home",
+          "text-size": 17,
+          "text-font": ["Open Sans Bold", "Arial Unicode MS Bold", "Noto Sans Bold"],
+          "text-allow-overlap": true,
+          "text-letter-spacing": 0.04,
+        },
+        paint: { "text-color": col.label, "text-halo-color": col.halo, "text-halo-width": 2 },
       });
     }
 

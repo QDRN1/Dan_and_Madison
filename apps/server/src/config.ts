@@ -83,6 +83,11 @@ export function setSetupPin(pin: string): void {
   setSetting(SETTING_KEYS.setupPin, pin);
 }
 
+/** True once the owner has chosen their own PIN (vs the env/default). */
+export function isPinSet(): boolean {
+  return Boolean(getSetting(SETTING_KEYS.setupPin));
+}
+
 export interface ApiKeys {
   flightAwareAeroApi?: string;
   flightRadar24Token?: string;

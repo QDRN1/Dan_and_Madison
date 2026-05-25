@@ -1,0 +1,184 @@
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  background: var(--bg-grad);
+  overflow: hidden;
+  opacity: 1;
+  transition: opacity 0.6s ease;
+}
+.splash--hide {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Background connecting network */
+.splash-net {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.5;
+}
+.splash-net .net-lines line {
+  stroke: var(--accent);
+  stroke-width: 1.2;
+  stroke-dasharray: 6 10;
+  opacity: 0.35;
+  animation: net-dash 4s linear infinite;
+}
+.splash-net .net-nodes circle {
+  fill: var(--accent);
+  opacity: 0.7;
+  animation: node-pulse 2.4s ease-in-out infinite;
+}
+@keyframes net-dash {
+  to { stroke-dashoffset: -160; }
+}
+@keyframes node-pulse {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 0.9; }
+}
+
+/* Radar scope */
+.scope {
+  position: relative;
+  width: 230px;
+  height: 230px;
+  border-radius: 50%;
+}
+.ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(163, 201, 64, 0.4);
+  border-radius: 50%;
+}
+.ring.r1 { width: 100%; height: 100%; }
+.ring.r2 { width: 66%; height: 66%; }
+.ring.r3 { width: 33%; height: 33%; }
+.cross {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  background: rgba(163, 201, 64, 0.25);
+}
+.cross-h { width: 100%; height: 1px; transform: translate(-50%, -50%); }
+.cross-v { width: 1px; height: 100%; transform: translate(-50%, -50%); }
+.sweep {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, rgba(163, 201, 64, 0.55), rgba(163, 201, 64, 0.05) 55deg, transparent 90deg, transparent 360deg);
+  animation: sweep-spin 2.4s linear infinite;
+  -webkit-mask: radial-gradient(circle, #000 99%, transparent 100%);
+  mask: radial-gradient(circle, #000 99%, transparent 100%);
+}
+@keyframes sweep-spin {
+  to { transform: rotate(360deg); }
+}
+.blip {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 10px 2px rgba(163, 201, 64, 0.8);
+  opacity: 0;
+}
+.blip.b1 { top: 28%; left: 64%; animation: blip 2.4s linear infinite; }
+.blip.b2 { top: 60%; left: 38%; animation: blip 2.4s linear infinite 0.8s; }
+.blip.b3 { top: 70%; left: 70%; animation: blip 2.4s linear infinite 1.6s; }
+@keyframes blip {
+  0% { opacity: 0; transform: scale(0.4); }
+  10% { opacity: 1; transform: scale(1); }
+  60% { opacity: 0.5; }
+  100% { opacity: 0; transform: scale(1.6); }
+}
+.scope-captain {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  transform: translate(-50%, -50%);
+  filter: drop-shadow(0 0 8px rgba(0, 0, 0, 0.4));
+  animation: cap-pop 0.8s ease-out both;
+}
+@keyframes cap-pop {
+  from { transform: translate(-50%, -50%) scale(0.6); opacity: 0; }
+  to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
+
+/* Plane flying across */
+.splash-plane {
+  position: absolute;
+  font-size: 26px;
+  color: var(--text);
+  left: -8%;
+  top: 62%;
+  transform: rotate(-32deg);
+  animation: fly 3.4s ease-in-out infinite;
+  opacity: 0.85;
+}
+@keyframes fly {
+  0% { left: -8%; top: 70%; opacity: 0; }
+  15% { opacity: 0.9; }
+  85% { opacity: 0.9; }
+  100% { left: 108%; top: 22%; opacity: 0; }
+}
+
+.splash-word {
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  z-index: 1;
+}
+.splash-word .w-q { color: var(--text); }
+.splash-word .w-r { color: var(--accent); letter-spacing: 0.32em; }
+.splash-sub {
+  color: var(--muted);
+  font-size: 14px;
+  z-index: 1;
+}
+.splash-sub .ell::after {
+  content: "";
+  animation: ell 1.4s steps(4, end) infinite;
+}
+@keyframes ell {
+  0% { content: ""; }
+  25% { content: "."; }
+  50% { content: ".."; }
+  75% { content: "..."; }
+}
+.splash-bar {
+  width: 220px;
+  height: 4px;
+  border-radius: 4px;
+  background: rgba(163, 201, 64, 0.16);
+  overflow: hidden;
+  z-index: 1;
+}
+.splash-bar span {
+  display: block;
+  width: 40%;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--accent);
+  animation: load-slide 1.4s ease-in-out infinite;
+}
+@keyframes load-slide {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(320%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sweep, .splash-plane, .blip, .splash-bar span, .net-lines line, .net-nodes circle { animation: none; }
+}

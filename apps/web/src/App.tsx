@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { BASE, api, connectLive } from "./api";
 import { useRadar } from "./store";
 import { RadarView } from "./components/RadarView";
+import { Splash } from "./components/Splash";
 import { Setup } from "./pages/Setup";
 import { Admin } from "./pages/Admin";
 
@@ -17,8 +18,23 @@ function currentRoute(): Route {
 export function App(): JSX.Element {
   const setConfig = useRadar((s) => s.setConfig);
   const applySnapshot = useRadar((s) => s.applySnapshot);
+  const config = useRadar((s) => s.config);
   const theme = useRadar((s) => s.theme);
   const [route, setRoute] = useState<Route>(currentRoute());
+
+  // Cool radar splash on the main view: shows until config loads + a min time.
+  const [minElapsed, setMinElapsed] = useState(false);
+  const [splashGone, setSplashGone] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setMinElapsed(true), 2200);
+    return () => clearTimeout(t);
+  }, []);
+  const splashFading = Boolean(config) && minElapsed;
+  useEffect(() => {
+    if (!splashFading || splashGone) return;
+    const t = setTimeout(() => setSplashGone(true), 650);
+    return () => clearTimeout(t);
+  }, [splashFading, splashGone]);
 
   useEffect(() => {
     const onPop = () => setRoute(currentRoute());
@@ -51,5 +67,10 @@ export function App(): JSX.Element {
 
   if (route === "setup") return <Setup />;
   if (route === "admin") return <Admin />;
-  return <RadarView />;
+  return (
+    <>
+      <RadarView />
+      {!splashGone && <Splash fading={splashFading} />}
+    </>
+  );
 }

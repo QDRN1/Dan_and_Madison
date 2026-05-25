@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import "./setup.css";
 import { BASE, api, geocodeCity, type GeoResult } from "../api";
 import { useRadar } from "../store";
@@ -26,7 +26,13 @@ export function Setup(): JSX.Element {
   const [unlocked, setUnlocked] = useState(false);
   const [pin, setPin] = useState("");
   const [pinError, setPinError] = useState(false);
+  const [pinSet, setPinSet] = useState<boolean | null>(null);
   const [step, setStep] = useState(0);
+
+  // First run? Decide whether to create a PIN or ask for the existing one.
+  useEffect(() => {
+    api.pinStatus().then((s) => setPinSet(s.pinSet)).catch(() => setPinSet(true));
+  }, []);
 
   async function tryUnlock(value: string): Promise<void> {
     const res = await api.verifyPin(value).catch(() => ({ ok: false }));
@@ -39,25 +45,43 @@ export function Setup(): JSX.Element {
     }
   }
 
+  const logo = (
+    <img className="setup-logo" src={config?.brand.logoUrl ?? `${BASE}/brand/logo.svg`} alt="QDRN" onError={(e) => (e.currentTarget.style.display = "none")} />
+  );
+
   if (!unlocked) {
     return (
       <div className="setup">
         <div className="page-toggle"><ThemeToggle className="glass" /></div>
         <div className="glass setup-card">
-          <img className="setup-logo" src={config?.brand.logoUrl ?? `${BASE}/brand/logo.svg`} alt="QDRN" onError={(e) => (e.currentTarget.style.display = "none")} />
-          <CaptainQ>
-            Ahoy! I'm <b>CaptainQ</b>, your setup guide. Punch in the device PIN and I'll
-            walk you through getting your radar online. 🫡
-          </CaptainQ>
-          <PinPad
-            pin={pin}
-            error={pinError}
-            onChange={(v) => {
-              setPin(v);
-              setPinError(false);
-              if (v.length >= 4) void tryUnlock(v);
-            }}
-          />
+          {logo}
+          {pinSet === null && <p className="step-sub" style={{ textAlign: "center" }}>Loading…</p>}
+          {pinSet === false && (
+            <CreatePin
+              onDone={(newPin) => {
+                setPin(newPin);
+                setPinSet(true);
+                setUnlocked(true);
+              }}
+            />
+          )}
+          {pinSet === true && (
+            <>
+              <CaptainQ>
+                Ahoy! I'm <b>CaptainQ</b>, your setup guide. Punch in your device PIN and I'll
+                walk you through getting your radar online. 🫡
+              </CaptainQ>
+              <PinPad
+                pin={pin}
+                error={pinError}
+                onChange={(v) => {
+                  setPin(v);
+                  setPinError(false);
+                  if (v.length >= 4) void tryUnlock(v);
+                }}
+              />
+            </>
+          )}
         </div>
       </div>
     );
@@ -103,6 +127,53 @@ function PinPad({ pin, error, onChange }: { pin: string; error: boolean; onChang
         <button onClick={() => press("0")}>0</button>
         <button onClick={() => onChange("")} aria-label="Clear">C</button>
       </div>
+    </div>
+  );
+}
+
+function CreatePin({ onDone }: { onDone: (pin: string) => void }): JSX.Element {
+  const [stage, setStage] = useState<"choose" | "confirm">("choose");
+  const [first, setFirst] = useState("");
+  const [val, setVal] = useState("");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function advance(): Promise<void> {
+    if (stage === "choose") {
+      if (val.length < 4) return;
+      setFirst(val);
+      setVal("");
+      setError("");
+      setStage("confirm");
+      return;
+    }
+    if (val !== first) {
+      setError("Those didn't match — let's try again.");
+      setFirst("");
+      setVal("");
+      setStage("choose");
+      return;
+    }
+    setSaving(true);
+    const res = await api.setPin(val).catch(() => ({ ok: false }));
+    setSaving(false);
+    if (res.ok) onDone(val);
+    else setError("Couldn't save the PIN. Try again.");
+  }
+
+  return (
+    <div>
+      <CaptainQ>
+        Welcome aboard! I'm <b>CaptainQ</b>. First, let's set a <b>PIN</b> for your radar —
+        pick 4–6 digits you'll remember. You'll use it whenever you change settings. 🫡
+      </CaptainQ>
+      <h2 className="step-title">{stage === "choose" ? "Create a PIN" : "Confirm your PIN"}</h2>
+      <p className="step-sub">{stage === "choose" ? "Choose 4–6 digits." : "Enter the same PIN again."}</p>
+      <PinPad pin={val} error={Boolean(error)} onChange={(v) => { setVal(v); setError(""); }} />
+      {error && <div style={{ color: "var(--danger)", textAlign: "center", marginBottom: 10 }}>{error}</div>}
+      <button className="btn btn-primary btn-block" disabled={val.length < 4 || saving} onClick={() => void advance()}>
+        {saving ? "Saving…" : stage === "choose" ? "Continue →" : "Set PIN"}
+      </button>
     </div>
   );
 }

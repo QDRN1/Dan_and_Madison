@@ -8,8 +8,10 @@ import {
   getBrand,
   getReceiver,
   getSetupPin,
+  isPinSet,
   setApiKey,
   setReceiver,
+  setSetupPin,
 } from "../config.js";
 import { enrich } from "../enrichment.js";
 import { applyFeedersInBackground, writeFeederEnv } from "../feeder.js";
@@ -64,6 +66,21 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
   // ── Friend-facing setup wizard (PIN-gated) ─────────────────────────────────
 
   app.get("/setup/state", async () => setupState());
+
+  app.get("/setup/pin-status", async () => ({ pinSet: isPinSet() }));
+
+  // First-run PIN creation (allowed once). Changing later requires the current PIN.
+  app.post<{ Body: { pin?: string; currentPin?: string } }>("/setup/set-pin", async (req, reply) => {
+    const pin = req.body?.pin;
+    if (typeof pin !== "string" || !/^\d{4,6}$/.test(pin)) {
+      return reply.code(400).send({ error: "invalid_pin", detail: "PIN must be 4–6 digits." });
+    }
+    if (isPinSet() && !pinOk(req.body?.currentPin)) {
+      return reply.code(401).send({ error: "bad_pin", detail: "Current PIN required to change it." });
+    }
+    setSetupPin(pin);
+    return { ok: true };
+  });
 
   app.post<{ Body: { pin?: string } }>("/setup/verify-pin", async (req) => ({
     ok: pinOk(req.body?.pin),

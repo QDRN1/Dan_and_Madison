@@ -26,6 +26,9 @@ export const api = {
   snapshot: () => get<LiveSnapshot>("/aircraft"),
   stats: () => get<Stats>("/stats"),
   setupState: () => get<SetupState>("/setup/state"),
+  pinStatus: () => get<{ pinSet: boolean }>("/setup/pin-status"),
+  setPin: (pin: string, currentPin?: string) =>
+    post<{ ok: boolean }>("/setup/set-pin", { pin, currentPin }),
   verifyPin: (pin: string) => post<{ ok: boolean }>("/setup/verify-pin", { pin }),
   saveLocation: (pin: string, city: string, lat: number, lon: number) =>
     post<{ ok: boolean; setup: SetupState }>("/setup/location", { pin, city, lat, lon }),
