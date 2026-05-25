@@ -1,15 +1,20 @@
 import type { FastifyInstance } from "fastify";
-import type { PublicConfig, SetupState } from "@qdrn/shared";
+import type { AdminSettings, PublicConfig, SetupState } from "@qdrn/shared";
 import {
   BASE_PATH,
   MAP_STYLE_DARK,
   MAP_STYLE_LIGHT,
+  getAeroApiConfig,
+  getAeroApiUsage,
   getApiKeys,
   getBrand,
+  getPilotName,
   getReceiver,
   getSetupPin,
   isPinSet,
+  setAeroApiConfig,
   setApiKey,
+  setPilotName,
   setReceiver,
   setSetupPin,
 } from "../config.js";
@@ -46,7 +51,14 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
     mapStyle: { light: MAP_STYLE_LIGHT, dark: MAP_STYLE_DARK },
     brand: getBrand(),
     setup: setupState(),
+    pilotName: getPilotName(),
   }));
+
+  function aeroStatus() {
+    const cfg = getAeroApiConfig();
+    const u = getAeroApiUsage();
+    return { enabled: cfg.enabled, cap: cfg.cap, used: u.count, month: u.month, keyPresent: Boolean(getApiKeys().flightAwareAeroApi) };
+  }
 
   app.get("/aircraft", async () => store.getSnapshot());
 
@@ -92,18 +104,49 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
     ok: pinOk(req.body?.pin),
   }));
 
-  app.post<{ Body: { pin?: string; city?: string; lat?: number; lon?: number } }>(
+  app.post<{ Body: { pin?: string; city?: string; lat?: number; lon?: number; county?: string } }>(
     "/setup/location",
     async (req, reply) => {
       if (!pinOk(req.body?.pin)) return reply.code(401).send({ error: "bad_pin" });
-      const { city, lat, lon } = req.body;
+      const { city, lat, lon, county } = req.body;
       if (typeof city !== "string" || typeof lat !== "number" || typeof lon !== "number") {
         return reply.code(400).send({ error: "invalid" });
       }
-      setReceiver(lat, lon, city);
-      return { ok: true, setup: setupState() };
+      setReceiver(lat, lon, city, typeof county === "string" ? county : undefined);
+      return { ok: true, setup: setupState(), receiver: getReceiver() };
     },
   );
+
+  // Full editable settings for the PIN-gated Settings tab. Returns the actual
+  // key values (owner-only, behind the PIN) so each can be revealed/edited.
+  app.post<{ Body: { pin?: string } }>("/setup/settings", async (req, reply) => {
+    if (!pinOk(req.body?.pin)) return reply.code(401).send({ error: "bad_pin" });
+    const k = getApiKeys();
+    const settings: AdminSettings = {
+      pilotName: getPilotName(),
+      receiver: getReceiver(),
+      keys: {
+        flightAwareAeroApi: k.flightAwareAeroApi ?? "",
+        flightRadar24Token: k.flightRadar24Token ?? "",
+        fr24SharingKey: k.fr24SharingKey ?? "",
+        piawareFeederId: k.piawareFeederId ?? "",
+      },
+      aero: aeroStatus(),
+    };
+    return settings;
+  });
+
+  app.post<{ Body: { pin?: string; enabled?: boolean; cap?: number } }>("/setup/aeroapi", async (req, reply) => {
+    if (!pinOk(req.body?.pin)) return reply.code(401).send({ error: "bad_pin" });
+    setAeroApiConfig({ enabled: req.body?.enabled, cap: req.body?.cap });
+    return { ok: true, aero: aeroStatus() };
+  });
+
+  app.post<{ Body: { pin?: string; name?: string } }>("/setup/name", async (req, reply) => {
+    if (!pinOk(req.body?.pin)) return reply.code(401).send({ error: "bad_pin" });
+    setPilotName(typeof req.body?.name === "string" ? req.body.name.trim() : "");
+    return { ok: true, pilotName: getPilotName() };
+  });
 
   app.post<{
     Body: {

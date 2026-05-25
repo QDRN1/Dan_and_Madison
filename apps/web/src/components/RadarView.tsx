@@ -1,14 +1,14 @@
 import { useState } from "react";
 import "./radar.css";
-import { BASE } from "../api";
 import { useRadar } from "../store";
 import { MapView } from "./MapView";
 import { AircraftDetail } from "./AircraftDetail";
 import { FlightList } from "./FlightList";
 import { StatsPanel } from "./StatsPanel";
+import { Settings } from "./Settings";
 import { ThemeToggle } from "./ThemeToggle";
 
-type Panel = "flights" | "stats";
+type Panel = "flights" | "stats" | "settings";
 
 export function RadarView(): JSX.Element {
   const config = useRadar((s) => s.config);
@@ -17,6 +17,9 @@ export function RadarView(): JSX.Element {
   const [panel, setPanel] = useState<Panel>("flights");
 
   const brand = config?.brand;
+  const rx = config?.receiver;
+  const pilot = config?.pilotName?.trim();
+  const cityLine = rx?.city ? `${rx.city}${rx.county ? ` (${rx.county})` : ""}` : "";
 
   return (
     <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
@@ -27,7 +30,11 @@ export function RadarView(): JSX.Element {
           <span className="brand-plate">
             {brand?.logoUrl && <img src={brand.logoUrl} alt={brand?.name ?? "QDRN Radar"} onError={(e) => (e.currentTarget.style.display = "none")} />}
           </span>
-          {config?.receiver.city && <span className="brand-sub">Live over {config.receiver.city}</span>}
+          <div className="brand-text">
+            <span className="brand-greeting">{pilot ? `Hello Pilot, ${pilot}` : "Hello Pilot!"}</span>
+            {cityLine && <span className="brand-sub">Live over {cityLine}</span>}
+            {rx?.artcc && <span className="brand-artcc">{rx.artcc.name} Center ({rx.artcc.id})</span>}
+          </div>
         </div>
         <div className="spacer" />
         <div className="live glass">
@@ -53,27 +60,18 @@ export function RadarView(): JSX.Element {
         </div>
 
         <div className="drawer-tabs">
-          <button className={`tab${panel === "flights" ? " active" : ""}`} onClick={() => setPanel("flights")}>
-            Flights
-          </button>
-          <button className={`tab${panel === "stats" ? " active" : ""}`} onClick={() => setPanel("stats")}>
-            Stats
-          </button>
+          {(["flights", "stats", "settings"] as const).map((p) => (
+            <button key={p} className={`tab${panel === p ? " active" : ""}`} onClick={() => setPanel(p)}>
+              {p === "flights" ? "Flights" : p === "stats" ? "Stats" : "Settings"}
+            </button>
+          ))}
         </div>
 
-        <div className="drawer-body scroll">
+        <div className="drawer-body">
           {panel === "flights" && <FlightList />}
           {panel === "stats" && <StatsPanel />}
+          {panel === "settings" && <Settings />}
         </div>
-
-        <nav className="menu-links">
-          <a className="menu-link" href={`${BASE}/setup`}>
-            <span>⚙</span> Device setup
-          </a>
-          <a className="menu-link" href={`${BASE}/admin`}>
-            <span>🛡</span> Super admin
-          </a>
-        </nav>
       </aside>
 
       <AircraftDetail />

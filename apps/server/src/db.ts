@@ -49,14 +49,17 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_flagged_at ON flagged(at);
 
-  -- Farthest aircraft ever tracked, bucketed by compass bearing, so we can
-  -- draw the real coverage footprint. One row per bearing bucket.
-  CREATE TABLE IF NOT EXISTS coverage (
-    bucket     INTEGER PRIMARY KEY,
+  -- Farthest aircraft tracked per (bearing bucket, day) so the coverage
+  -- footprint reflects a rolling recent window and can grow/shrink over time.
+  DROP TABLE IF EXISTS coverage;
+  CREATE TABLE IF NOT EXISTS coverage_daily (
+    bucket     INTEGER NOT NULL,
+    day        TEXT NOT NULL,
     dist_nm    REAL NOT NULL,
     lat        REAL NOT NULL,
     lon        REAL NOT NULL,
-    updated_at INTEGER NOT NULL
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (bucket, day)
   );
 `);
 

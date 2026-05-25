@@ -126,16 +126,13 @@ export function AircraftDetail(): JSX.Element | null {
         </>
       )}
 
-      <div className="kv-grid">
+      <div className="kv-grid" style={{ gridTemplateColumns: "1fr 1fr" }}>
         <KV k="Altitude" v={fmtAlt(a)} />
         <KV k="Speed" v={fmtSpeed(a)} />
-        <KV k="Vertical" v={fmtVert(a)} />
         <KV k="Heading" v={fmtTrack(a)} />
+        <KV k="Vertical" v={fmtVert(a)} />
         <KV k="Distance" v={a.distNm != null ? `${a.distNm} nm` : "—"} />
         <KV k="Squawk" v={a.squawk ?? "—"} />
-      </div>
-
-      <div className="kv-grid" style={{ gridTemplateColumns: "1fr 1fr" }}>
         <KV k="Registration" v={e?.registration ?? "—"} />
         <KV k="Type" v={e?.typeCode ?? "—"} />
         <KV k="ICAO hex" v={a.hex.toUpperCase()} mono />

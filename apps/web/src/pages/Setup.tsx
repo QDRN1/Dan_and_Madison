@@ -212,8 +212,7 @@ function LocationStep({ pin, onNext, onBack }: { pin: string; onNext: () => void
     // City-level only: round to ~city precision so the exact home isn't stored.
     const lat = Math.round(chosen.lat * 100) / 100;
     const lon = Math.round(chosen.lon * 100) / 100;
-    const city = chosen.name.split(",").slice(0, 2).join(",").trim();
-    await api.saveLocation(pin, city, lat, lon).catch(() => undefined);
+    await api.saveLocation(pin, chosen.label, lat, lon, chosen.county).catch(() => undefined);
     setSaving(false);
     onNext();
   }
@@ -233,13 +232,13 @@ function LocationStep({ pin, onNext, onBack }: { pin: string; onNext: () => void
       {results.length > 0 && (
         <div className="geo-results">
           {results.map((r, i) => (
-            <button key={i} onClick={() => { setChosen(r); setResults([]); setQ(r.name.split(",").slice(0, 2).join(", ")); }}>
+            <button key={i} onClick={() => { setChosen(r); setResults([]); setQ(r.label); }}>
               {r.name}
             </button>
           ))}
         </div>
       )}
-      {chosen && <div className="connected-badge" style={{ marginTop: 12 }}>✓ {chosen.name.split(",").slice(0, 2).join(", ")}</div>}
+      {chosen && <div className="connected-badge" style={{ marginTop: 12 }}>✓ {chosen.label}</div>}
       <div className="row">
         <button className="btn" onClick={onBack}>← Back</button>
         <button className="btn btn-primary" disabled={!chosen || saving} onClick={() => void save()}>

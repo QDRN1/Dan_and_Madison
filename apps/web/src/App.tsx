@@ -4,14 +4,12 @@ import { useRadar } from "./store";
 import { RadarView } from "./components/RadarView";
 import { Splash } from "./components/Splash";
 import { Setup } from "./pages/Setup";
-import { Admin } from "./pages/Admin";
 
-type Route = "radar" | "setup" | "admin";
+type Route = "radar" | "setup";
 
 function currentRoute(): Route {
   const path = location.pathname.replace(BASE, "").replace(/^\/+/, "");
   if (path.startsWith("setup")) return "setup";
-  if (path.startsWith("admin")) return "admin";
   return "radar";
 }
 
@@ -66,7 +64,6 @@ export function App(): JSX.Element {
   }, [theme]);
 
   if (route === "setup") return <Setup />;
-  if (route === "admin") return <Admin />;
   return (
     <>
       <RadarView />

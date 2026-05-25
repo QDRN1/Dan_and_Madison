@@ -1,4 +1,4 @@
-import type { Aircraft, CoveragePoint, LiveSnapshot, PublicConfig, SetupState, Stats } from "@qdrn/shared";
+import type { AdminSettings, Aircraft, CoveragePoint, LiveSnapshot, PublicConfig, SetupState, Stats } from "@qdrn/shared";
 
 // Vite injects the configured base path (e.g. "/md/"); strip the trailing slash.
 export const BASE = import.meta.env.BASE_URL.replace(/\/+$/, "");
@@ -31,10 +31,14 @@ export const api = {
   setPin: (pin: string, currentPin?: string) =>
     post<{ ok: boolean }>("/setup/set-pin", { pin, currentPin }),
   verifyPin: (pin: string) => post<{ ok: boolean }>("/setup/verify-pin", { pin }),
-  saveLocation: (pin: string, city: string, lat: number, lon: number) =>
-    post<{ ok: boolean; setup: SetupState }>("/setup/location", { pin, city, lat, lon }),
+  saveLocation: (pin: string, city: string, lat: number, lon: number, county?: string) =>
+    post<{ ok: boolean; setup: SetupState }>("/setup/location", { pin, city, lat, lon, county }),
   saveKeys: (pin: string, keys: Record<string, string>) =>
     post<{ ok: boolean; setup: SetupState }>("/setup/keys", { pin, ...keys }),
+  settings: (pin: string) => post<AdminSettings>("/setup/settings", { pin }),
+  saveAero: (pin: string, patch: { enabled?: boolean; cap?: number }) =>
+    post<{ ok: boolean; aero: AdminSettings["aero"] }>("/setup/aeroapi", { pin, ...patch }),
+  saveName: (pin: string, name: string) => post<{ ok: boolean; pilotName: string }>("/setup/name", { pin, name }),
 };
 
 /** Connect to the live websocket, auto-reconnecting with backoff. */
@@ -109,16 +113,48 @@ export function connectLive(onSnapshot: (s: LiveSnapshot) => void): () => void {
   };
 }
 
-/** Nominatim geocode for the setup wizard's city search (no key needed). */
+const STATE_ABBR: Record<string, string> = {
+  Alabama: "AL", Alaska: "AK", Arizona: "AZ", Arkansas: "AR", California: "CA", Colorado: "CO",
+  Connecticut: "CT", Delaware: "DE", "District of Columbia": "DC", Florida: "FL", Georgia: "GA",
+  Hawaii: "HI", Idaho: "ID", Illinois: "IL", Indiana: "IN", Iowa: "IA", Kansas: "KS", Kentucky: "KY",
+  Louisiana: "LA", Maine: "ME", Maryland: "MD", Massachusetts: "MA", Michigan: "MI", Minnesota: "MN",
+  Mississippi: "MS", Missouri: "MO", Montana: "MT", Nebraska: "NE", Nevada: "NV", "New Hampshire": "NH",
+  "New Jersey": "NJ", "New Mexico": "NM", "New York": "NY", "North Carolina": "NC", "North Dakota": "ND",
+  Ohio: "OH", Oklahoma: "OK", Oregon: "OR", Pennsylvania: "PA", "Rhode Island": "RI", "South Carolina": "SC",
+  "South Dakota": "SD", Tennessee: "TN", Texas: "TX", Utah: "UT", Vermont: "VT", Virginia: "VA",
+  Washington: "WA", "West Virginia": "WV", Wisconsin: "WI", Wyoming: "WY",
+};
+
+/** Nominatim geocode for the location search (no key needed). */
 export interface GeoResult {
+  /** Full display name from Nominatim. */
   name: string;
+  /** "City, ST" friendly label. */
+  label: string;
+  county?: string;
   lat: number;
   lon: number;
 }
 export async function geocodeCity(q: string): Promise<GeoResult[]> {
-  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=5&q=${encodeURIComponent(q)}`;
+  const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&q=${encodeURIComponent(q)}`;
   const res = await fetch(url, { headers: { Accept: "application/json" } });
   if (!res.ok) return [];
-  const rows = (await res.json()) as Array<{ display_name: string; lat: string; lon: string }>;
-  return rows.map((r) => ({ name: r.display_name, lat: Number(r.lat), lon: Number(r.lon) }));
+  const rows = (await res.json()) as Array<{
+    display_name: string;
+    lat: string;
+    lon: string;
+    address?: Record<string, string>;
+  }>;
+  return rows.map((r) => {
+    const a = r.address ?? {};
+    const place = a.city || a.town || a.village || a.hamlet || a.municipality || a.county || r.display_name.split(",")[0]!;
+    const st = a.state ? STATE_ABBR[a.state] ?? a.state : "";
+    return {
+      name: r.display_name,
+      label: st ? `${place}, ${st}` : place,
+      county: a.county,
+      lat: Number(r.lat),
+      lon: Number(r.lon),
+    };
+  });
 }

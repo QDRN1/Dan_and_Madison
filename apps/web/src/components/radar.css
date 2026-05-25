@@ -38,6 +38,26 @@
   color: var(--muted);
   font-weight: 600;
 }
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+  min-width: 0;
+}
+.brand-greeting {
+  font-size: 14px;
+  font-weight: 800;
+}
+.brand-artcc {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+}
+@media (max-width: 560px) {
+  .brand-artcc {
+    display: none;
+  }
+}
 @media (max-width: 480px) {
   .brand-sub {
     display: none;
@@ -415,4 +435,59 @@
   border-radius: 8px;
   background: var(--surface-2);
   border: 1px solid var(--border);
+}
+
+/* Settings tab */
+.set-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+}
+.set-pill-wrap {
+  margin-bottom: 8px;
+}
+.set-pill {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 11px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font-weight: 700;
+  font-size: 13px;
+  text-align: left;
+}
+.set-pill .dot {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  background: var(--muted);
+  box-shadow: none;
+  animation: none;
+}
+.set-pill.on .dot {
+  background: var(--accent);
+}
+.set-pill-val {
+  margin-left: auto;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 58%;
+}
+.set-pill-body {
+  padding: 10px 2px 4px;
+}
+.set-result {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-top: 8px;
+  font-weight: 500;
 }

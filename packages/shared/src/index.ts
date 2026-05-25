@@ -130,6 +130,9 @@ export interface ReceiverInfo {
   lat: number;
   lon: number;
   city: string;
+  county?: string;
+  /** Air Route Traffic Control Center containing the receiver, if known. */
+  artcc?: { id: string; name: string };
   rangeRingsNm: number[];
 }
 
@@ -188,6 +191,21 @@ export interface PublicConfig {
   mapStyle: { light: string; dark: string };
   brand: BrandConfig;
   setup: SetupState;
+  /** Pilot name for the greeting; empty/undefined → generic "Hello Pilot!". */
+  pilotName?: string;
+}
+
+/** Full editable settings returned to the PIN-gated Settings tab (incl. secrets). */
+export interface AdminSettings {
+  pilotName: string;
+  receiver: ReceiverInfo;
+  keys: {
+    flightAwareAeroApi: string;
+    flightRadar24Token: string;
+    fr24SharingKey: string;
+    piawareFeederId: string;
+  };
+  aero: AeroApiStatus;
 }
 
 export interface BrandConfig {

@@ -1,4 +1,5 @@
 import type { BrandConfig, ReceiverInfo } from "@qdrn/shared";
+import { lookupArtcc } from "./artcc.js";
 import { getSetting, setSetting } from "./db.js";
 
 function env(name: string, fallback = ""): string {
@@ -67,8 +68,10 @@ const SETTING_KEYS = {
   receiverLat: "receiver.lat",
   receiverLon: "receiver.lon",
   receiverCity: "receiver.city",
+  receiverCounty: "receiver.county",
   rangeRings: "receiver.rangeRingsNm",
   setupPin: "setup.pin",
+  pilotName: "pilot.name",
   faKey: "keys.flightaware.aeroapi",
   fr24Token: "keys.flightradar24.token",
   fr24SharingKey: "keys.fr24.sharingKey",
@@ -83,18 +86,28 @@ export function getReceiver(): ReceiverInfo {
   const lat = Number(getSetting(SETTING_KEYS.receiverLat) ?? envNum("RECEIVER_LAT", 45.0317));
   const lon = Number(getSetting(SETTING_KEYS.receiverLon) ?? envNum("RECEIVER_LON", -93.2279));
   const city = getSetting(SETTING_KEYS.receiverCity) ?? env("RECEIVER_CITY", "Minneapolis, MN");
+  const county = getSetting(SETTING_KEYS.receiverCounty) || undefined;
   const ringsRaw = getSetting(SETTING_KEYS.rangeRings) ?? env("RANGE_RINGS_NM", "50,100,150");
   const rangeRingsNm = ringsRaw
     .split(",")
     .map((s) => Number(s.trim()))
     .filter((n) => Number.isFinite(n) && n > 0);
-  return { lat, lon, city, rangeRingsNm };
+  return { lat, lon, city, county, artcc: lookupArtcc(lat, lon), rangeRingsNm };
 }
 
-export function setReceiver(lat: number, lon: number, city: string): void {
+export function setReceiver(lat: number, lon: number, city: string, county?: string): void {
   setSetting(SETTING_KEYS.receiverLat, String(lat));
   setSetting(SETTING_KEYS.receiverLon, String(lon));
   setSetting(SETTING_KEYS.receiverCity, city);
+  setSetting(SETTING_KEYS.receiverCounty, county ?? "");
+}
+
+export function getPilotName(): string {
+  return getSetting(SETTING_KEYS.pilotName) ?? env("PILOT_NAME", "");
+}
+
+export function setPilotName(name: string): void {
+  setSetting(SETTING_KEYS.pilotName, name.slice(0, 40));
 }
 
 export function getSetupPin(): string {
