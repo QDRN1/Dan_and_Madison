@@ -45,9 +45,11 @@ async function main(): Promise<void> {
     app.log.warn(`Web build not found at ${WEB_DIST} — run \`npm run build\` (dev uses the Vite server).`);
   }
 
-  // Bare domain → app base path.
-  app.get("/", (_req, reply) => reply.redirect(BASE_PATH));
-  app.get(`${BASE_PATH}`, (_req, reply) => reply.redirect(`${BASE_PATH}/`));
+  // Bare domain → app base path (only when running under a sub-path).
+  if (BASE_PATH) {
+    app.get("/", (_req, reply) => reply.redirect(BASE_PATH));
+    app.get(`${BASE_PATH}`, (_req, reply) => reply.redirect(`${BASE_PATH}/`));
+  }
 
   app.get(`${BASE_PATH}/healthz`, async () => ({ ok: true }));
 
