@@ -167,6 +167,16 @@
   font-weight: 800;
   letter-spacing: 0.03em;
 }
+.ac-logo {
+  height: 34px;
+  width: auto;
+  max-width: 96px;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 8px;
+  padding: 3px 6px;
+  flex: 0 0 auto;
+}
 .route {
   display: flex;
   align-items: center;

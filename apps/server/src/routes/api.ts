@@ -53,11 +53,11 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
     const hex = req.params.hex.toLowerCase();
     const ac = store.get(hex);
     if (!ac) return reply.code(404).send({ error: "not_found" });
-    // Make sure enrichment is attached for the detail view; refetch if we have
-    // a callsign now but no route yet (cached, so this is cheap).
-    if (!ac.enrichment || (!ac.enrichment.route && (ac.flight ?? "").length > 0)) {
-      ac.enrichment = await enrich(hex, ac.flight);
-    }
+    // Opening a flight is when we spend a (metered) AeroAPI query: upgrade the
+    // route to a live flight plan. enrich() itself dedupes/rate-limits so
+    // repeated opens of the same flight don't re-query.
+    const upgraded = await enrich(hex, ac.flight, { paid: true });
+    if (upgraded) ac.enrichment = upgraded;
     return { ...ac, trail: store.getTrail(hex) };
   });
 

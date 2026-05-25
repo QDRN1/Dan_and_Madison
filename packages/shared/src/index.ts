@@ -55,6 +55,8 @@ export interface Enrichment {
   typeName?: string; // human, e.g. Boeing 737-800
   operator?: string;
   operatorIcao?: string;
+  /** Operating airline IATA code (e.g. DL) — used for the airline logo. */
+  operatorIata?: string;
   owner?: string;
   manufacturer?: string;
   built?: string;
@@ -65,6 +67,8 @@ export interface Enrichment {
   source?: EnrichmentSource;
   /** Unix ms when enrichment was fetched. */
   fetchedAt?: number;
+  /** Unix ms of the last paid (AeroAPI) route attempt, to rate-limit retries. */
+  paidCheckedAt?: number;
 }
 
 export interface AircraftPhoto {
@@ -96,6 +100,8 @@ export interface Route {
   callsign?: string;
   origin?: Airport;
   destination?: Airport;
+  /** Which source produced this route (so we know when to upgrade to AeroAPI). */
+  source?: EnrichmentSource;
   /** Scheduled / estimated times, ISO strings, when available (paid sources). */
   scheduledOut?: string;
   scheduledIn?: string;

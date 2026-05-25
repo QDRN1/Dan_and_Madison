@@ -48,6 +48,15 @@ export function AircraftDetail(): JSX.Element | null {
       </div>
 
       <div className="sheet-head">
+        {e?.operatorIata && (
+          <img
+            className="ac-logo"
+            src={`https://images.daisycon.io/airline/?width=160&height=80&color=ffffff&iata=${encodeURIComponent(e.operatorIata)}`}
+            alt={e.operator ?? e.operatorIata}
+            loading="lazy"
+            onError={(ev) => (ev.currentTarget.style.display = "none")}
+          />
+        )}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="callsign" style={{ color: altColor(ft) }}>
             {label(a)}
