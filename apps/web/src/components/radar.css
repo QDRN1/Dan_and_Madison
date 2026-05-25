@@ -79,7 +79,18 @@
   height: 42px;
   border-radius: 12px;
   font-size: 18px;
+  line-height: 1;
   color: var(--text);
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  flex: none;
+}
+.iconbtn:hover {
+  background: var(--hover);
+  border-color: var(--accent);
 }
 .iconbtn.active {
   border-color: var(--accent);
