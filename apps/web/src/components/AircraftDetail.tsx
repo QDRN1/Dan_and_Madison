@@ -41,22 +41,33 @@ export function AircraftDetail(): JSX.Element | null {
   const dest = e?.route?.destination;
   const photo = e?.photo;
 
+  const r = e?.route;
+  const landed = Boolean(r?.actualIn);
+  const dep = fmtClock(r?.actualOut ?? r?.actualOff ?? r?.estimatedOut ?? r?.scheduledOut);
+  const arrIso = r?.actualIn ?? r?.estimatedIn ?? r?.scheduledIn;
+  const arr = fmtClock(arrIso);
+  const rem = landed ? "Landed" : remaining(arrIso);
+  const progress = !landed && typeof r?.progressPercent === "number" ? r.progressPercent : null;
+
   return (
     <div className={`glass sheet scroll${expanded ? " sheet--expanded" : ""}`}>
       <div className="sheet-handle" onClick={() => setExpanded((v) => !v)} role="button" aria-label="Expand">
         <span />
       </div>
 
-      <div className="sheet-head">
-        {e?.operatorIata && (
+      {e?.operatorIata && (
+        <div className="ac-logo-band">
           <img
             className="ac-logo"
-            src={`https://images.daisycon.io/airline/?width=160&height=80&color=ffffff&iata=${encodeURIComponent(e.operatorIata)}`}
+            src={`https://images.daisycon.io/airline/?width=200&height=100&color=ffffff&iata=${encodeURIComponent(e.operatorIata)}`}
             alt={e.operator ?? e.operatorIata}
             loading="lazy"
-            onError={(ev) => (ev.currentTarget.style.display = "none")}
+            onError={(ev) => (ev.currentTarget.parentElement!.style.display = "none")}
           />
-        )}
+        </div>
+      )}
+
+      <div className="sheet-head">
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="callsign" style={{ color: altColor(ft) }}>
             {label(a)}
@@ -91,6 +102,30 @@ export function AircraftDetail(): JSX.Element | null {
         </div>
       )}
 
+      {(dep || arr) && (
+        <>
+          <div className="flight-times">
+            <div className="ft">
+              <div className="ft-k">Departed</div>
+              <div className="ft-v">{dep || "—"}</div>
+            </div>
+            <div className="ft">
+              <div className="ft-k">Arrives</div>
+              <div className="ft-v">{arr || "—"}</div>
+            </div>
+            <div className="ft">
+              <div className="ft-k">{landed ? "Status" : "Remaining"}</div>
+              <div className="ft-v">{rem}</div>
+            </div>
+          </div>
+          {progress != null && (
+            <div className="progress" title={`${Math.round(progress)}% complete`}>
+              <div className="progress-fill" style={{ width: `${Math.max(2, Math.min(100, progress))}%` }} />
+            </div>
+          )}
+        </>
+      )}
+
       <div className="kv-grid">
         <KV k="Altitude" v={fmtAlt(a)} />
         <KV k="Speed" v={fmtSpeed(a)} />
@@ -114,6 +149,25 @@ export function AircraftDetail(): JSX.Element | null {
       )}
     </div>
   );
+}
+
+function fmtClock(iso?: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+function remaining(iso?: string): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  const ms = d.getTime() - Date.now();
+  if (ms <= 0) return "Arriving";
+  const mins = Math.round(ms / 60000);
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
 function KV({ k, v, mono }: { k: string; v: string; mono?: boolean }): JSX.Element {

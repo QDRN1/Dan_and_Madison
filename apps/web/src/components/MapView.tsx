@@ -109,14 +109,14 @@ export function MapView(): JSX.Element {
       });
     }
     if (!map.getLayer("home-fill")) {
-      map.addLayer({ id: "home-fill", type: "fill", source: "home-area", paint: { "fill-color": "#a3c940", "fill-opacity": 0.12 } });
+      map.addLayer({ id: "home-fill", type: "fill", source: "home-area", paint: { "fill-color": "#a3c940", "fill-opacity": 0.05 } });
     }
     if (!map.getLayer("home-line")) {
       map.addLayer({
         id: "home-line",
         type: "line",
         source: "home-area",
-        paint: { "line-color": "#a3c940", "line-opacity": 0.55, "line-width": 1.5 },
+        paint: { "line-color": "#a3c940", "line-opacity": 0.25, "line-width": 1 },
       });
     }
 
@@ -283,7 +283,8 @@ export function MapView(): JSX.Element {
       zoom: 8,
       attributionControl: { compact: true },
     });
-    map.addControl(new maplibregl.NavigationControl({ showCompass: true }), "bottom-right");
+    // Compass/pitch button removed — rotation is disabled, so it did nothing.
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
     map.touchZoomRotate.disableRotation();
     mapRef.current = map;
 

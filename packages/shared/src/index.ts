@@ -102,10 +102,17 @@ export interface Route {
   destination?: Airport;
   /** Which source produced this route (so we know when to upgrade to AeroAPI). */
   source?: EnrichmentSource;
-  /** Scheduled / estimated times, ISO strings, when available (paid sources). */
+  /** Scheduled / estimated / actual times, ISO strings, when available (paid). */
   scheduledOut?: string;
+  estimatedOut?: string;
+  actualOut?: string;
   scheduledIn?: string;
   estimatedIn?: string;
+  actualIn?: string;
+  /** Wheels-up time (actual_off), for "departed" when no gate-out is known. */
+  actualOff?: string;
+  /** 0–100 flight progress, when the paid source reports it. */
+  progressPercent?: number;
 }
 
 /** Live snapshot pushed over the websocket. */

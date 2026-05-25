@@ -167,15 +167,49 @@
   font-weight: 800;
   letter-spacing: 0.03em;
 }
+.ac-logo-band {
+  display: flex;
+  justify-content: center;
+  margin: 2px 0 10px;
+}
 .ac-logo {
-  height: 34px;
+  height: 42px;
   width: auto;
-  max-width: 96px;
+  max-width: 160px;
   object-fit: contain;
   background: #fff;
-  border-radius: 8px;
-  padding: 3px 6px;
-  flex: 0 0 auto;
+  border-radius: 10px;
+  padding: 5px 12px;
+}
+.flight-times {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 12px 0 6px;
+  text-align: center;
+}
+.flight-times .ft-k {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.flight-times .ft-v {
+  font-size: 16px;
+  font-weight: 700;
+  margin-top: 2px;
+}
+.progress {
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(128, 128, 128, 0.22);
+  overflow: hidden;
+  margin: 4px 0 2px;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
 }
 .route {
   display: flex;
