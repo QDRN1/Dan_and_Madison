@@ -73,6 +73,9 @@ const SETTING_KEYS = {
   fr24Token: "keys.flightradar24.token",
   fr24SharingKey: "keys.fr24.sharingKey",
   piawareFeederId: "keys.piaware.feederId",
+  aeroEnabled: "aeroapi.enabled",
+  aeroCap: "aeroapi.monthlyCap",
+  aeroUsage: "aeroapi.usage",
 } as const;
 
 export function getReceiver(): ReceiverInfo {
@@ -131,6 +134,61 @@ export function setApiKey(which: keyof ApiKeys, value: string): void {
     piawareFeederId: SETTING_KEYS.piawareFeederId,
   };
   setSetting(map[which], value);
+}
+
+// ─── AeroAPI spend guard ─────────────────────────────────────────────────────
+// "Both": a master on/off switch and an automatic monthly call cap. Past the
+// cap (or when disabled), we fall back to the free route sources.
+
+const monthFmt = new Intl.DateTimeFormat("en-CA", { timeZone: TIMEZONE, year: "numeric", month: "2-digit" });
+function currentMonth(): string {
+  return monthFmt.format(new Date()).slice(0, 7); // YYYY-MM
+}
+
+export function getAeroApiConfig(): { enabled: boolean; cap: number } {
+  const enabledRaw = getSetting(SETTING_KEYS.aeroEnabled);
+  const enabled = enabledRaw == null ? env("AEROAPI_ENABLED", "true") !== "false" : enabledRaw === "true";
+  const capRaw = getSetting(SETTING_KEYS.aeroCap);
+  const cap = capRaw == null ? envNum("AEROAPI_MONTHLY_CAP", 500) : Math.max(0, Number(capRaw) || 0);
+  return { enabled, cap };
+}
+
+export function setAeroApiConfig(patch: { enabled?: boolean; cap?: number }): void {
+  if (typeof patch.enabled === "boolean") setSetting(SETTING_KEYS.aeroEnabled, String(patch.enabled));
+  if (typeof patch.cap === "number" && Number.isFinite(patch.cap)) {
+    setSetting(SETTING_KEYS.aeroCap, String(Math.max(0, Math.floor(patch.cap))));
+  }
+}
+
+function readUsage(): { month: string; count: number } {
+  const raw = getSetting(SETTING_KEYS.aeroUsage);
+  const month = currentMonth();
+  if (!raw) return { month, count: 0 };
+  try {
+    const u = JSON.parse(raw) as { month: string; count: number };
+    return u.month === month ? u : { month, count: 0 };
+  } catch {
+    return { month, count: 0 };
+  }
+}
+
+export function getAeroApiUsage(): { month: string; count: number } {
+  return readUsage();
+}
+
+/** Count one billable AeroAPI call against the current month. */
+export function recordAeroApiCall(): void {
+  const u = readUsage();
+  setSetting(SETTING_KEYS.aeroUsage, JSON.stringify({ month: u.month, count: u.count + 1 }));
+}
+
+/** Whether a paid AeroAPI lookup is currently permitted (key + switch + cap). */
+export function paidLookupsAllowed(): boolean {
+  if (!getApiKeys().flightAwareAeroApi) return false;
+  const { enabled, cap } = getAeroApiConfig();
+  if (!enabled) return false;
+  if (cap > 0 && readUsage().count >= cap) return false;
+  return true;
 }
 
 export function getBrand(): BrandConfig {

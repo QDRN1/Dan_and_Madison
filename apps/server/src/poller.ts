@@ -1,6 +1,7 @@
 import { EventEmitter } from "node:events";
 import type { Aircraft, LiveSnapshot, TrailPoint } from "@qdrn/shared";
 import { AIRCRAFT_JSON_URL, POLL_INTERVAL_MS, getReceiver } from "./config.js";
+import { recordCoverage } from "./coverage.js";
 import { enrich } from "./enrichment.js";
 import { bearing, distanceNm } from "./geo.js";
 import { isFlagged, recordSighting } from "./stats.js";
@@ -147,9 +148,10 @@ class AircraftStore extends EventEmitter {
         });
       }
 
-      // Record for stats + trail once we have a position.
+      // Record for stats + coverage + trail once we have a position.
       if (ac.lat != null && ac.lon != null) {
         recordSighting(ac);
+        if (ac.bearing != null && ac.distNm != null) recordCoverage(ac.bearing, ac.distNm, ac.lat, ac.lon);
         this.recordTrail(ac, now);
       }
     }

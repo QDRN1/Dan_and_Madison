@@ -48,6 +48,16 @@ db.exec(`
     at        INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_flagged_at ON flagged(at);
+
+  -- Farthest aircraft ever tracked, bucketed by compass bearing, so we can
+  -- draw the real coverage footprint. One row per bearing bucket.
+  CREATE TABLE IF NOT EXISTS coverage (
+    bucket     INTEGER PRIMARY KEY,
+    dist_nm    REAL NOT NULL,
+    lat        REAL NOT NULL,
+    lon        REAL NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
 `);
 
 const getStmt = db.prepare<[string]>("SELECT value FROM settings WHERE key = ?");

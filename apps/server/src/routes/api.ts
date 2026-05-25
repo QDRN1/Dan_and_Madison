@@ -13,6 +13,7 @@ import {
   setReceiver,
   setSetupPin,
 } from "../config.js";
+import { getCoverage } from "../coverage.js";
 import { clearEnrichmentCache, enrich } from "../enrichment.js";
 import { applyFeedersInBackground, writeFeederEnv } from "../feeder.js";
 import { store } from "../poller.js";
@@ -65,6 +66,8 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
     const current = store.getSnapshot().aircraft.length;
     return getStats(current);
   });
+
+  app.get("/coverage", async () => getCoverage());
 
   // ── Friend-facing setup wizard (PIN-gated) ─────────────────────────────────
 

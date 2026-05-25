@@ -8,12 +8,13 @@ import { FlightList } from "./FlightList";
 import { StatsPanel } from "./StatsPanel";
 import { ThemeToggle } from "./ThemeToggle";
 
-type Tab = "none" | "flights" | "stats";
+type Panel = "flights" | "stats";
 
 export function RadarView(): JSX.Element {
   const config = useRadar((s) => s.config);
   const count = useRadar((s) => s.aircraft.filter((a) => a.lat != null).length);
-  const [tab, setTab] = useState<Tab>("none");
+  const [open, setOpen] = useState(false);
+  const [panel, setPanel] = useState<Panel>("flights");
 
   const brand = config?.brand;
 
@@ -34,46 +35,48 @@ export function RadarView(): JSX.Element {
         </div>
         <ThemeToggle className="glass" />
         <button
-          className={`iconbtn glass${tab === "flights" ? " active" : ""}`}
-          onClick={() => setTab(tab === "flights" ? "none" : "flights")}
-          aria-label="Flight list"
-          title="Flight list"
+          className={`iconbtn glass${open ? " active" : ""}`}
+          onClick={() => setOpen((v) => !v)}
+          aria-label="Menu"
+          title="Menu"
         >
           ☰
         </button>
-        <button
-          className={`iconbtn glass${tab === "stats" ? " active" : ""}`}
-          onClick={() => setTab(tab === "stats" ? "none" : "stats")}
-          aria-label="Stats"
-          title="Stats"
-        >
-          ▦
-        </button>
       </header>
 
-      <aside className={`drawer glass${tab !== "none" ? " open" : ""}`}>
-        {tab !== "none" && (
-          <button className="iconbtn glass drawer-close" onClick={() => setTab("none")} aria-label="Close">
+      <aside className={`drawer glass${open ? " open" : ""}`}>
+        <div className="drawer-head">
+          <span className="drawer-title">Menu</span>
+          <button className="iconbtn" onClick={() => setOpen(false)} aria-label="Close menu">
             ✕
           </button>
-        )}
+        </div>
+
         <div className="drawer-tabs">
-          <button className={`tab${tab === "flights" ? " active" : ""}`} onClick={() => setTab("flights")}>
+          <button className={`tab${panel === "flights" ? " active" : ""}`} onClick={() => setPanel("flights")}>
             Flights
           </button>
-          <button className={`tab${tab === "stats" ? " active" : ""}`} onClick={() => setTab("stats")}>
+          <button className={`tab${panel === "stats" ? " active" : ""}`} onClick={() => setPanel("stats")}>
             Stats
           </button>
         </div>
-        {tab === "flights" && <FlightList />}
-        {tab === "stats" && <StatsPanel />}
+
+        <div className="drawer-body scroll">
+          {panel === "flights" && <FlightList />}
+          {panel === "stats" && <StatsPanel />}
+        </div>
+
+        <nav className="menu-links">
+          <a className="menu-link" href={`${BASE}/setup`}>
+            <span>⚙</span> Device setup
+          </a>
+          <a className="menu-link" href={`${BASE}/admin`}>
+            <span>🛡</span> Super admin
+          </a>
+        </nav>
       </aside>
 
       <AircraftDetail />
-
-      <a className="setup-link" href={`${BASE}/setup`}>
-        ⚙ Device setup
-      </a>
     </div>
   );
 }

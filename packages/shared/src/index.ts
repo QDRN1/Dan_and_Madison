@@ -159,6 +159,28 @@ export interface FlaggedSighting {
   at: number;
 }
 
+/** Farthest tracked point for one bearing bucket, for the coverage outline. */
+export interface CoveragePoint {
+  bearing: number;
+  distNm: number;
+  lat: number;
+  lon: number;
+}
+
+/** AeroAPI usage + spending guard, surfaced in the admin console. */
+export interface AeroApiStatus {
+  /** Master switch: when false, only free route sources are ever used. */
+  enabled: boolean;
+  /** Monthly call cap; 0 = unlimited. Past the cap we fall back to free. */
+  cap: number;
+  /** Calls made in the current month. */
+  used: number;
+  /** Current month key, YYYY-MM. */
+  month: string;
+  /** Whether a FlightAware key is configured. */
+  keyPresent: boolean;
+}
+
 /** Public, friend-facing config + setup state. */
 export interface PublicConfig {
   basePath: string;

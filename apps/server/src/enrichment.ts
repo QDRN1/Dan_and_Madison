@@ -1,5 +1,5 @@
 import type { Airport, Enrichment, Route } from "@qdrn/shared";
-import { ADSBDB_BASE, HEXDB_BASE, getApiKeys } from "./config.js";
+import { ADSBDB_BASE, HEXDB_BASE, getApiKeys, paidLookupsAllowed, recordAeroApiCall } from "./config.js";
 import { db } from "./db.js";
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h — registrations/types rarely change
@@ -78,7 +78,7 @@ export async function enrich(
     const wantUpgrade =
       paid &&
       callsign.length > 0 &&
-      Boolean(getApiKeys().flightAwareAeroApi) &&
+      paidLookupsAllowed() &&
       e.route?.source !== "flightaware" &&
       Date.now() - (e.paidCheckedAt ?? 0) > PAID_RETRY_MS;
     if (!wantUpgrade) return { ...e, source: "cache" };
@@ -103,7 +103,7 @@ export async function enrich(
  *  enrichment, recording the attempt so we don't keep re-querying. */
 async function upgradeWithPaid(hex: string, callsign: string, e: Enrichment): Promise<Enrichment> {
   const fa = getApiKeys().flightAwareAeroApi;
-  const res = fa ? await flightAwareRoute(callsign, fa) : undefined;
+  const res = fa && paidLookupsAllowed() ? await flightAwareRoute(callsign, fa) : undefined;
   const merged: Enrichment = {
     ...e,
     route: res?.route ?? e.route,
@@ -185,7 +185,7 @@ async function hexdbAircraft(hex: string): Promise<Partial<Enrichment> | undefin
 // ─── Route (callsign → origin/destination) ───────────────────────────────────
 
 async function lookupRoute(callsign: string, paid: boolean): Promise<RouteResult | undefined> {
-  if (paid) {
+  if (paid && paidLookupsAllowed()) {
     const fa = getApiKeys().flightAwareAeroApi;
     if (fa) {
       const r = await flightAwareRoute(callsign, fa);
@@ -266,6 +266,7 @@ async function flightAwareRoute(callsign: string, apiKey: string): Promise<Route
       console.warn(`[aeroapi] ${callsign} -> ${res.status} ${res.statusText}; falling back to free route data`);
       return undefined;
     }
+    recordAeroApiCall(); // a 2xx is a billable query — count it toward the cap
     j = await res.json();
   } catch (e) {
     console.warn(`[aeroapi] ${callsign} request failed:`, (e as Error)?.message ?? e);

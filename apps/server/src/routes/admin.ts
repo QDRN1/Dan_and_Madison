@@ -3,9 +3,25 @@ import { promisify } from "node:util";
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from "jose";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { ServiceName, ServiceStatus } from "@qdrn/shared";
-import { ADMIN_EMAILS, CF_ACCESS_AUD, CF_ACCESS_TEAM_DOMAIN, setSetupPin } from "../config.js";
+import type { AeroApiStatus } from "@qdrn/shared";
+import {
+  ADMIN_EMAILS,
+  CF_ACCESS_AUD,
+  CF_ACCESS_TEAM_DOMAIN,
+  getAeroApiConfig,
+  getAeroApiUsage,
+  getApiKeys,
+  getReceiver,
+  setAeroApiConfig,
+  setApiKey,
+  setReceiver,
+  setSetupPin,
+  type ApiKeys,
+} from "../config.js";
 import { db } from "../db.js";
-import { applyFeeders } from "../feeder.js";
+import { clearEnrichmentCache } from "../enrichment.js";
+import { applyFeeders, applyFeedersInBackground, writeFeederEnv } from "../feeder.js";
+import { store } from "../poller.js";
 
 const exec = promisify(execFile);
 
@@ -125,6 +141,69 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
 
   app.post("/feeders/apply", async () => applyFeeders());
 
+  // ── API keys (CF-gated; same store as the PIN setup wizard) ───────────────
+  app.get("/keys", async () => {
+    const k = getApiKeys();
+    return {
+      flightAwareConnected: Boolean(k.flightAwareAeroApi),
+      flightRadar24Connected: Boolean(k.flightRadar24Token),
+      fr24SharingKeySet: Boolean(k.fr24SharingKey),
+      piawareFeederIdSet: Boolean(k.piawareFeederId),
+    };
+  });
+
+  app.post<{ Body: Partial<Record<keyof ApiKeys, string>> }>("/keys", async (req) => {
+    const b = req.body ?? {};
+    let routeKeyChanged = false;
+    let feedersChanged = false;
+    for (const which of ["flightAwareAeroApi", "flightRadar24Token", "fr24SharingKey", "piawareFeederId"] as const) {
+      const v = b[which];
+      if (v === undefined) continue;
+      setApiKey(which, v.trim());
+      if (which === "flightAwareAeroApi") routeKeyChanged = true;
+      if (which === "fr24SharingKey" || which === "piawareFeederId") feedersChanged = true;
+    }
+    if (routeKeyChanged) {
+      clearEnrichmentCache();
+      store.resetEnrichment();
+    }
+    if (feedersChanged) {
+      const k = getApiKeys();
+      writeFeederEnv({
+        ...(k.fr24SharingKey ? { FR24KEY: k.fr24SharingKey } : {}),
+        ...(k.piawareFeederId ? { FEEDER_ID: k.piawareFeederId } : {}),
+      });
+      applyFeedersInBackground((m) => req.log.info(m));
+    }
+    return { ok: true };
+  });
+
+  // ── Receiver location ─────────────────────────────────────────────────────
+  app.get("/location", async () => getReceiver());
+
+  app.post<{ Body: { city?: string; lat?: number; lon?: number } }>("/location", async (req, reply) => {
+    const { city, lat, lon } = req.body ?? {};
+    if (typeof city !== "string" || typeof lat !== "number" || typeof lon !== "number") {
+      return reply.code(400).send({ error: "invalid" });
+    }
+    setReceiver(lat, lon, city);
+    return { ok: true, receiver: getReceiver() };
+  });
+
+  // ── AeroAPI spend guard (master switch + monthly cap + usage) ─────────────
+  app.get("/aeroapi", async (): Promise<AeroApiStatus> => {
+    const cfg = getAeroApiConfig();
+    const u = getAeroApiUsage();
+    return { enabled: cfg.enabled, cap: cfg.cap, used: u.count, month: u.month, keyPresent: Boolean(getApiKeys().flightAwareAeroApi) };
+  });
+
+  app.post<{ Body: { enabled?: boolean; cap?: number } }>("/aeroapi", async (req) => {
+    setAeroApiConfig({ enabled: req.body?.enabled, cap: req.body?.cap });
+    const cfg = getAeroApiConfig();
+    const u = getAeroApiUsage();
+    return { enabled: cfg.enabled, cap: cfg.cap, used: u.count, month: u.month, keyPresent: Boolean(getApiKeys().flightAwareAeroApi) };
+  });
+
   // Set/override the owner PIN (admin is already authenticated by CF Access, so
   // no current PIN needed — useful if the friend forgets it).
   app.post<{ Body: { pin?: string } }>("/device/set-pin", async (req, reply) => {
@@ -141,7 +220,7 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
   // the feeder.env keys file (feeding keeps working) — clear that over SSH if
   // re-gifting to a different person.
   app.post("/device/reset", async () => {
-    db.exec("DELETE FROM settings; DELETE FROM sightings; DELETE FROM flagged; DELETE FROM enrichment_cache;");
+    db.exec("DELETE FROM settings; DELETE FROM sightings; DELETE FROM flagged; DELETE FROM enrichment_cache; DELETE FROM coverage;");
     return { ok: true };
   });
 

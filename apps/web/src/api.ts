@@ -1,4 +1,4 @@
-import type { Aircraft, LiveSnapshot, PublicConfig, SetupState, Stats } from "@qdrn/shared";
+import type { Aircraft, CoveragePoint, LiveSnapshot, PublicConfig, SetupState, Stats } from "@qdrn/shared";
 
 // Vite injects the configured base path (e.g. "/md/"); strip the trailing slash.
 export const BASE = import.meta.env.BASE_URL.replace(/\/+$/, "");
@@ -25,6 +25,7 @@ export const api = {
   aircraft: (hex: string) => get<Aircraft>(`/aircraft/${hex}`),
   snapshot: () => get<LiveSnapshot>("/aircraft"),
   stats: () => get<Stats>("/stats"),
+  coverage: () => get<CoveragePoint[]>("/coverage"),
   setupState: () => get<SetupState>("/setup/state"),
   pinStatus: () => get<{ pinSet: boolean }>("/setup/pin-status"),
   setPin: (pin: string, currentPin?: string) =>

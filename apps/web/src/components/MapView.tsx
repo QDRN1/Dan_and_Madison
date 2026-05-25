@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
 import maplibregl, { type GeoJSONSource, type Map as MlMap } from "maplibre-gl";
 import type { FeatureCollection } from "geojson";
+import type { CoveragePoint } from "@qdrn/shared";
+import { api } from "../api";
 import { useRadar, type Theme } from "../store";
 import { altColor, altFeet } from "../format";
 
@@ -52,12 +54,23 @@ function emptyFc(): FeatureCollection {
   return { type: "FeatureCollection", features: [] };
 }
 
+function coveragePolygon(points: CoveragePoint[]): FeatureCollection {
+  if (points.length < 3) return emptyFc();
+  const ring = points.map((p) => [p.lon, p.lat] as [number, number]);
+  ring.push(ring[0]!);
+  return {
+    type: "FeatureCollection",
+    features: [{ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [ring] } }],
+  };
+}
+
 export function MapView(): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
   const readyRef = useRef(false);
   const handlersRef = useRef(false);
   const appliedThemeRef = useRef<Theme | null>(null);
+  const coverageRef = useRef<CoveragePoint[]>([]);
 
   const config = useRadar((s) => s.config);
   const aircraft = useRadar((s) => s.aircraft);
@@ -74,6 +87,45 @@ export function MapView(): JSX.Element {
     const col = mapColors(t);
 
     if (!map.hasImage("plane")) map.addImage("plane", makePlaneImage(), { sdf: true, pixelRatio: 4 });
+
+    // Surface airport runways/taxiways earlier (the basemap hides them until you
+    // zoom way in) so airfields are recognizable from a wider view.
+    for (const id of ["aeroway-runway", "aeroway-taxiway"]) {
+      if (!map.getLayer(id)) continue;
+      try {
+        map.setLayerZoomRange(id, 9, 24);
+        map.setPaintProperty(id, "line-opacity", id === "aeroway-runway" ? 0.9 : 0.6);
+        map.setPaintProperty(id, "line-width", [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          9,
+          id === "aeroway-runway" ? 1.2 : 0.5,
+          14,
+          id === "aeroway-runway" ? 6 : 2.5,
+        ]);
+        if (id === "aeroway-runway") map.setPaintProperty(id, "line-color", col.label);
+      } catch {
+        /* layer shape differs on this basemap — skip */
+      }
+    }
+
+    // Coverage footprint: the farthest aircraft tracked per bearing.
+    if (!map.getSource("coverage")) {
+      map.addSource("coverage", { type: "geojson", data: coveragePolygon(coverageRef.current) });
+    }
+    if (!map.getLayer("coverage-fill")) {
+      map.addLayer({ id: "coverage-fill", type: "fill", source: "coverage", paint: { "fill-color": "#5b8def", "fill-opacity": 0.06 } });
+    }
+    if (!map.getLayer("coverage-line")) {
+      map.addLayer({
+        id: "coverage-line",
+        type: "line",
+        source: "coverage",
+        layout: { "line-join": "round" },
+        paint: { "line-color": "#5b8def", "line-opacity": 0.55, "line-width": 1.5, "line-dasharray": [4, 2] },
+      });
+    }
 
     if (!map.getSource("rings")) {
       map.addSource("rings", {
@@ -251,6 +303,13 @@ export function MapView(): JSX.Element {
     });
   }
 
+  function updateCoverage(): void {
+    const map = mapRef.current;
+    if (!map || !readyRef.current) return;
+    const src = map.getSource("coverage") as GeoJSONSource | undefined;
+    if (src) src.setData(coveragePolygon(coverageRef.current));
+  }
+
   function updateTrail(): void {
     const map = mapRef.current;
     if (!map || !readyRef.current) return;
@@ -294,6 +353,7 @@ export function MapView(): JSX.Element {
       readyRef.current = true;
       updateSource();
       updateTrail();
+      updateCoverage();
     });
 
     return () => {
@@ -320,6 +380,7 @@ export function MapView(): JSX.Element {
       readyRef.current = true;
       updateSource();
       updateTrail();
+      updateCoverage();
     };
     map.on("styledata", onStyle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -336,6 +397,28 @@ export function MapView(): JSX.Element {
     updateTrail();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTrail]);
+
+  // Periodically refresh the coverage footprint (grows slowly over time).
+  useEffect(() => {
+    if (!config) return;
+    let alive = true;
+    const load = () =>
+      api
+        .coverage()
+        .then((pts) => {
+          if (!alive) return;
+          coverageRef.current = pts;
+          updateCoverage();
+        })
+        .catch(() => undefined);
+    load();
+    const t = setInterval(load, 60_000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config]);
 
   // Gently pan to a newly selected aircraft.
   useEffect(() => {
