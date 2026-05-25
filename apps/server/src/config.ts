@@ -13,10 +13,9 @@ function envNum(name: string, fallback: number): number {
 }
 
 export const BASE_PATH = (() => {
-  let p = env("BASE_PATH", "/md").trim();
-  if (p === "" || p === "/") return ""; // serve at the root of the port
+  let p = env("BASE_PATH", "/md");
   if (!p.startsWith("/")) p = "/" + p;
-  p = p.replace(/\/+$/, "");
+  if (p.endsWith("/") && p.length > 1) p = p.slice(0, -1);
   return p;
 })();
 
