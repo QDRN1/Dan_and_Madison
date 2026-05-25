@@ -9,6 +9,9 @@ import { isFlagged, recordSighting } from "./stats.js";
 const TRAIL_MAX_POINTS = 250;
 const TRAIL_MAX_AGE_MS = 45 * 60 * 1000;
 const TRAIL_MIN_GAP_MS = 2000;
+// Drop an aircraft this long after we last saw it in the feed (e.g. it landed
+// or flew out of range). Based on wall-clock, not the decoder's stale `seen`.
+const STALE_DROP_MS = Number(process.env.STALE_DROP_MS) > 0 ? Number(process.env.STALE_DROP_MS) : 60 * 1000;
 
 /** Raw aircraft entry shape from readsb/ultrafeeder aircraft.json. */
 interface RawAircraft {
@@ -30,6 +33,8 @@ interface RawAircraft {
 class AircraftStore extends EventEmitter {
   private aircraft = new Map<string, Aircraft>();
   private trails = new Map<string, TrailPoint[]>();
+  // Wall-clock time we last saw each hex in the feed, for reliable stale-drop.
+  private lastSeen = new Map<string, number>();
   // Callsign each aircraft was last enriched for, so we re-enrich once the
   // callsign is decoded (it often appears a few ticks after first contact).
   private enrichedFor = new Map<string, string>();
@@ -108,6 +113,7 @@ class AircraftStore extends EventEmitter {
       if (!raw.hex) continue;
       const hex = raw.hex.toLowerCase().replace(/^~/, ""); // ~ = TIS-B/non-ICAO
       seen.add(hex);
+      this.lastSeen.set(hex, now);
 
       const prev = this.aircraft.get(hex);
       const ac: Aircraft = {
@@ -156,12 +162,15 @@ class AircraftStore extends EventEmitter {
       }
     }
 
-    // Drop aircraft we haven't seen recently (stale > 60s).
-    for (const [hex, ac] of this.aircraft) {
-      if (!seen.has(hex) && (ac.seen ?? 0) > 60) {
+    // Drop aircraft we haven't seen in the feed for a while (landed / out of
+    // range). Uses our own last-seen clock — the decoder's `seen` value on a
+    // dropped entry is whatever it was when last present and never grows.
+    for (const [hex] of this.aircraft) {
+      if (now - (this.lastSeen.get(hex) ?? 0) > STALE_DROP_MS) {
         this.aircraft.delete(hex);
         this.trails.delete(hex);
         this.enrichedFor.delete(hex);
+        this.lastSeen.delete(hex);
       }
     }
 

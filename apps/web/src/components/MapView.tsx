@@ -369,7 +369,10 @@ export function MapView(): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config]);
 
-  // Switch basemap on theme change, then re-add our layers + data.
+  // Switch basemap on theme change, then re-add our layers + data. We wait for
+  // the map to go idle (new style fully loaded) before re-installing — using the
+  // early "styledata" events races the style swap and leaves layers/planes
+  // wiped. Re-installing on idle also restores the coverage outline + rings.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !config) return;
@@ -377,16 +380,14 @@ export function MapView(): JSX.Element {
     appliedThemeRef.current = theme;
     readyRef.current = false;
     map.setStyle(config.mapStyle[theme]);
-    const onStyle = () => {
-      if (!map.isStyleLoaded()) return;
-      map.off("styledata", onStyle);
+    const reinstall = () => {
       installLayers(map, theme);
       readyRef.current = true;
       updateSource();
       updateTrail();
       updateCoverage();
     };
-    map.on("styledata", onStyle);
+    map.once("idle", reinstall);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [theme, config]);
 
