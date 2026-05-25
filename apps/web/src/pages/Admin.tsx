@@ -10,8 +10,13 @@ async function aget<T>(path: string): Promise<T> {
   if (!res.ok) throw new Error(String(res.status));
   return (await res.json()) as T;
 }
-async function apost(path: string): Promise<void> {
-  await fetch(`${ADMIN}${path}`, { method: "POST" });
+async function apost(path: string, body?: unknown): Promise<{ ok: boolean }> {
+  const res = await fetch(`${ADMIN}${path}`, {
+    method: "POST",
+    headers: body ? { "content-type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  return { ok: res.ok };
 }
 
 export function Admin(): JSX.Element {
@@ -20,6 +25,24 @@ export function Admin(): JSX.Element {
   const [error, setError] = useState(false);
   const [logName, setLogName] = useState<string | null>(null);
   const [logs, setLogs] = useState("");
+  const [newPin, setNewPin] = useState("");
+  const [deviceMsg, setDeviceMsg] = useState("");
+
+  async function changePin(): Promise<void> {
+    if (!/^\d{4,6}$/.test(newPin)) {
+      setDeviceMsg("PIN must be 4–6 digits.");
+      return;
+    }
+    const r = await apost("/device/set-pin", { pin: newPin });
+    setDeviceMsg(r.ok ? "PIN updated." : "Failed to set PIN.");
+    setNewPin("");
+  }
+
+  async function resetDevice(): Promise<void> {
+    if (!window.confirm("Factory reset? This wipes the PIN, location, API keys and stats so the device can be set up fresh. Feeding keeps running.")) return;
+    const r = await apost("/device/reset");
+    setDeviceMsg(r.ok ? "Device reset — re-onboard at /md/setup." : "Reset failed.");
+  }
 
   async function refresh(): Promise<void> {
     try {
@@ -83,6 +106,32 @@ export function Admin(): JSX.Element {
             </div>
           ))}
           {services.length === 0 && !error && <div className="muted">Loading…</div>}
+        </div>
+
+        <div className="glass" style={{ padding: 18, marginTop: 16 }}>
+          <h2 style={{ marginTop: 0, fontSize: 16 }}>Device</h2>
+          {deviceMsg && <div className="pill" style={{ marginBottom: 12 }}>{deviceMsg}</div>}
+
+          <div className="label">Owner PIN</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input
+              className="input"
+              inputMode="numeric"
+              placeholder="New 4–6 digit PIN"
+              value={newPin}
+              onChange={(e) => setNewPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            />
+            <button className="btn" style={{ whiteSpace: "nowrap" }} onClick={() => void changePin()}>Set PIN</button>
+          </div>
+
+          <div className="label" style={{ marginTop: 18 }}>Factory reset</div>
+          <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
+            Wipes the PIN, location, API keys and stats so a new owner can run the CaptainQ
+            setup from scratch. Feeding (FR24 / FlightAware) keeps running.
+          </p>
+          <button className="btn" style={{ borderColor: "var(--danger)", color: "var(--danger)" }} onClick={() => void resetDevice()}>
+            Reset device
+          </button>
         </div>
 
         {logName && (

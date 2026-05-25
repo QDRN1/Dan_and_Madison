@@ -2,7 +2,8 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { ServiceName, ServiceStatus } from "@qdrn/shared";
-import { ADMIN_EMAILS } from "../config.js";
+import { ADMIN_EMAILS, setSetupPin } from "../config.js";
+import { db } from "../db.js";
 import { applyFeeders } from "../feeder.js";
 
 const exec = promisify(execFile);
@@ -93,6 +94,26 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
   );
 
   app.post("/feeders/apply", async () => applyFeeders());
+
+  // Set/override the owner PIN (admin is already authenticated by CF Access, so
+  // no current PIN needed — useful if the friend forgets it).
+  app.post<{ Body: { pin?: string } }>("/device/set-pin", async (req, reply) => {
+    const pin = req.body?.pin;
+    if (typeof pin !== "string" || !/^\d{4,6}$/.test(pin)) {
+      return reply.code(400).send({ error: "invalid_pin", detail: "PIN must be 4–6 digits." });
+    }
+    setSetupPin(pin);
+    return { ok: true };
+  });
+
+  // Factory reset: wipe PIN, location, keys, and stats so the device can be
+  // onboarded fresh (re-triggers the first-run CaptainQ flow). Does NOT touch
+  // the feeder.env keys file (feeding keeps working) — clear that over SSH if
+  // re-gifting to a different person.
+  app.post("/device/reset", async () => {
+    db.exec("DELETE FROM settings; DELETE FROM sightings; DELETE FROM flagged; DELETE FROM enrichment_cache;");
+    return { ok: true };
+  });
 
   app.get("/info", async () => ({
     sshHint: "ssh over the Cloudflare tunnel — see infra/cloudflared and docs/ADMIN.md",
