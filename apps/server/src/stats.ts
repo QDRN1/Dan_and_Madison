@@ -31,17 +31,21 @@ const insertFlagged = db.prepare(
 );
 
 export function recordSighting(ac: Aircraft): void {
-  const e = ac.enrichment;
-  upsertSighting.run({
-    hex: ac.hex,
-    day: today(),
-    flight: ac.flight ?? null,
-    type_code: e?.typeCode ?? null,
-    type_name: e?.typeName ?? null,
-    operator: e?.operator ?? e?.operatorIcao ?? null,
-    ts: Date.now(),
-    dist: ac.distNm ?? 0,
-  } as any);
+  try {
+    const e = ac.enrichment;
+    upsertSighting.run({
+      hex: ac.hex,
+      day: today(),
+      flight: ac.flight ?? null,
+      type_code: e?.typeCode ?? null,
+      type_name: e?.typeName ?? null,
+      operator: e?.operator ?? e?.operatorIcao ?? null,
+      ts: Date.now(),
+      dist: ac.distNm ?? 0,
+    } as any);
+  } catch {
+    // Stats are best-effort — a write hiccup must never break live tracking.
+  }
 }
 
 /** Decide if an aircraft is "interesting", logging a flagged sighting on first sight. */
@@ -56,14 +60,18 @@ export function isFlagged(ac: Aircraft): boolean {
   }
   if (!flaggedToday.has(ac.hex)) {
     flaggedToday.add(ac.hex);
-    insertFlagged.run(
-      ac.hex,
-      ac.flight ?? null,
-      ac.enrichment?.typeName ?? null,
-      ac.enrichment?.operator ?? null,
-      reason,
-      Date.now(),
-    );
+    try {
+      insertFlagged.run(
+        ac.hex,
+        ac.flight ?? null,
+        ac.enrichment?.typeName ?? null,
+        ac.enrichment?.operator ?? null,
+        reason,
+        Date.now(),
+      );
+    } catch {
+      // Best-effort — never let a flagged-log write break tracking.
+    }
   }
   return true;
 }
