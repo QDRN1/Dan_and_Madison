@@ -49,17 +49,16 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_flagged_at ON flagged(at);
 
-  -- Farthest aircraft tracked per (bearing bucket, day) so the coverage
-  -- footprint reflects a rolling recent window and can grow/shrink over time.
+  -- Farthest aircraft tracked per bearing bucket, with the time it was set so
+  -- the coverage footprint reflects a rolling recent window (last 24h).
   DROP TABLE IF EXISTS coverage;
-  CREATE TABLE IF NOT EXISTS coverage_daily (
-    bucket     INTEGER NOT NULL,
-    day        TEXT NOT NULL,
+  DROP TABLE IF EXISTS coverage_daily;
+  CREATE TABLE IF NOT EXISTS coverage_range (
+    bucket     INTEGER PRIMARY KEY,
     dist_nm    REAL NOT NULL,
     lat        REAL NOT NULL,
     lon        REAL NOT NULL,
-    updated_at INTEGER NOT NULL,
-    PRIMARY KEY (bucket, day)
+    updated_at INTEGER NOT NULL
   );
 `);
 

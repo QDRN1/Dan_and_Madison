@@ -18,6 +18,7 @@ import {
   setReceiver,
   setSetupPin,
 } from "../config.js";
+import { getConnections } from "../connections.js";
 import { getCoverage } from "../coverage.js";
 import { clearEnrichmentCache, enrich } from "../enrichment.js";
 import { applyFeedersInBackground, writeFeederEnv } from "../feeder.js";
@@ -146,6 +147,12 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
     if (!pinOk(req.body?.pin)) return reply.code(401).send({ error: "bad_pin" });
     setPilotName(typeof req.body?.name === "string" ? req.body.name.trim() : "");
     return { ok: true, pilotName: getPilotName() };
+  });
+
+  // Real connection status per service (token validity / feeder health).
+  app.post<{ Body: { pin?: string; force?: boolean } }>("/setup/connections", async (req, reply) => {
+    if (!pinOk(req.body?.pin)) return reply.code(401).send({ error: "bad_pin" });
+    return getConnections(Boolean(req.body?.force));
   });
 
   app.post<{

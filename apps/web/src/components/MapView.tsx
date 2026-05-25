@@ -86,7 +86,11 @@ export function MapView(): JSX.Element {
     const { receiver } = config;
     const col = mapColors(t);
 
-    if (!map.hasImage("plane")) map.addImage("plane", makePlaneImage(), { sdf: true, pixelRatio: 4 });
+    // Re-create the plane icon every install: setStyle() drops style images, and
+    // a stale hasImage() check can leave the symbol layer with no texture (planes
+    // vanish after a dark/light switch). Recreate it fresh to be safe.
+    if (map.hasImage("plane")) map.removeImage("plane");
+    map.addImage("plane", makePlaneImage(), { sdf: true, pixelRatio: 4 });
 
     // Surface airport runways/taxiways earlier (the basemap hides them until you
     // zoom way in) so airfields are recognizable from a wider view.
@@ -412,7 +416,7 @@ export function MapView(): JSX.Element {
         })
         .catch(() => undefined);
     load();
-    const t = setInterval(load, 60_000);
+    const t = setInterval(load, 15_000);
     return () => {
       alive = false;
       clearInterval(t);

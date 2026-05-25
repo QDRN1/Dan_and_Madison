@@ -49,6 +49,13 @@ export function AircraftDetail(): JSX.Element | null {
   const rem = landed ? "Landed" : remaining(arrIso);
   const progress = !landed && typeof r?.progressPercent === "number" ? r.progressPercent : null;
 
+  const callsign = a.flight?.trim();
+  const fr24Url = e?.registration
+    ? `https://www.flightradar24.com/data/aircraft/${encodeURIComponent(e.registration)}`
+    : callsign
+    ? `https://www.flightradar24.com/${encodeURIComponent(callsign)}`
+    : null;
+
   return (
     <div className={`glass sheet scroll${expanded ? " sheet--expanded" : ""}`}>
       <div className="sheet-handle" onClick={() => setExpanded((v) => !v)} role="button" aria-label="Expand">
@@ -143,6 +150,12 @@ export function AircraftDetail(): JSX.Element | null {
         <div className="muted" style={{ fontSize: 12, marginTop: 12 }}>
           Operator: {e.owner}
         </div>
+      )}
+
+      {fr24Url && (
+        <a className="fr24-link" href={fr24Url} target="_blank" rel="noreferrer">
+          Track live on FlightRadar24 ↗
+        </a>
       )}
     </div>
   );

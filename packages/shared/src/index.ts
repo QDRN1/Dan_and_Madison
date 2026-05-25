@@ -184,6 +184,15 @@ export interface AeroApiStatus {
   keyPresent: boolean;
 }
 
+/** Real connection status per service for the Settings pills. */
+export type ConnStatus = "ok" | "invalid" | "error" | "down" | "unset" | "unknown";
+export interface Connections {
+  flightAwareAeroApi: ConnStatus;
+  flightRadar24Token: ConnStatus;
+  fr24SharingKey: ConnStatus;
+  piawareFeederId: ConnStatus;
+}
+
 /** Public, friend-facing config + setup state. */
 export interface PublicConfig {
   basePath: string;

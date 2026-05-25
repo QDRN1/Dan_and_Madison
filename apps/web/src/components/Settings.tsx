@@ -1,16 +1,34 @@
 import { useEffect, useState } from "react";
-import type { AdminSettings } from "@qdrn/shared";
+import type { AdminSettings, ConnStatus, Connections } from "@qdrn/shared";
 import { BASE, api, geocodeCity, type GeoResult } from "../api";
 import { useRadar } from "../store";
 
 const PIN_KEY = "qdrn-pin";
 
-const KEY_FIELDS: { field: keyof AdminSettings["keys"]; label: string }[] = [
-  { field: "flightAwareAeroApi", label: "FlightAware AeroAPI" },
-  { field: "piawareFeederId", label: "PiAware Feeder ID" },
-  { field: "fr24SharingKey", label: "FR24 Sharing Key" },
-  { field: "flightRadar24Token", label: "FR24 API Token" },
+const KEY_FIELDS: { field: keyof AdminSettings["keys"]; label: string; feeder: boolean }[] = [
+  { field: "flightAwareAeroApi", label: "FlightAware AeroAPI", feeder: false },
+  { field: "piawareFeederId", label: "PiAware Feeder ID", feeder: true },
+  { field: "fr24SharingKey", label: "FR24 Sharing Key", feeder: true },
+  { field: "flightRadar24Token", label: "FR24 API Token", feeder: false },
 ];
+
+function statusInfo(status: ConnStatus | undefined, set: boolean, feeder: boolean): { cls: string; label: string } {
+  const st = status ?? (set ? "unknown" : "unset");
+  switch (st) {
+    case "ok":
+      return { cls: "on", label: feeder ? "feeding" : "connected" };
+    case "invalid":
+      return { cls: "bad", label: "invalid key" };
+    case "down":
+      return { cls: "bad", label: "not feeding" };
+    case "error":
+      return { cls: "warn", label: "error" };
+    case "unknown":
+      return set ? { cls: "warn", label: "set (unverified)" } : { cls: "", label: "not set" };
+    default:
+      return { cls: "", label: "not set" };
+  }
+}
 
 export function Settings(): JSX.Element {
   const setConfig = useRadar((s) => s.setConfig);
@@ -21,6 +39,19 @@ export function Settings(): JSX.Element {
   const [s, setS] = useState<AdminSettings | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [pinSet, setPinSet] = useState(true);
+  const [conn, setConn] = useState<Connections | null>(null);
+  const [checking, setChecking] = useState(false);
+
+  async function loadConn(p: string, force = false): Promise<void> {
+    setChecking(true);
+    try {
+      setConn(await api.connections(p, force));
+    } catch {
+      /* ignore */
+    } finally {
+      setChecking(false);
+    }
+  }
 
   async function load(p: string): Promise<boolean> {
     try {
@@ -30,6 +61,7 @@ export function Settings(): JSX.Element {
       setUnlocked(true);
       setErr(false);
       sessionStorage.setItem(PIN_KEY, p);
+      void loadConn(p);
       return true;
     } catch {
       sessionStorage.removeItem(PIN_KEY);
@@ -91,7 +123,12 @@ export function Settings(): JSX.Element {
 
       {/* Connection pills */}
       <div>
-        <div className="label">Connections</div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div className="label">Connections</div>
+          <button className="btn" style={{ padding: "4px 10px", fontSize: 12 }} disabled={checking} onClick={() => void loadConn(pin, true)}>
+            {checking ? "Checking…" : "Re-check"}
+          </button>
+        </div>
         <LocationPill
           pin={pin}
           city={s.receiver.city}
@@ -100,11 +137,13 @@ export function Settings(): JSX.Element {
           onToggle={() => setOpen(open === "location" ? null : "location")}
           onSaved={async () => { await load(pin); await refreshConfig(); setOpen(null); }}
         />
-        {KEY_FIELDS.map(({ field, label }) => (
+        {KEY_FIELDS.map(({ field, label, feeder }) => (
           <KeyPill
             key={field}
             label={label}
             value={s.keys[field]}
+            status={conn?.[field]}
+            feeder={feeder}
             expanded={open === field}
             onToggle={() => setOpen(open === field ? null : field)}
             onSave={async (v) => { await api.saveKeys(pin, { [field]: v }); await load(pin); setOpen(null); }}
@@ -188,17 +227,26 @@ function LocationPill({
 }
 
 function KeyPill({
-  label, value, expanded, onToggle, onSave,
-}: { label: string; value: string; expanded: boolean; onToggle: () => void; onSave: (v: string) => Promise<void> }): JSX.Element {
+  label, value, status, feeder, expanded, onToggle, onSave,
+}: {
+  label: string;
+  value: string;
+  status: ConnStatus | undefined;
+  feeder: boolean;
+  expanded: boolean;
+  onToggle: () => void;
+  onSave: (v: string) => Promise<void>;
+}): JSX.Element {
   const set = value.trim().length > 0;
+  const { cls, label: statusLabel } = statusInfo(status, set, feeder);
   const [draft, setDraft] = useState(value);
   useEffect(() => { setDraft(value); }, [value]);
   return (
     <div className="set-pill-wrap">
-      <button className={`set-pill${set ? " on" : ""}`} onClick={onToggle}>
+      <button className={`set-pill ${cls}`} onClick={onToggle}>
         <span className="dot" />
         <span className="set-pill-label">{label}</span>
-        <span className="set-pill-val">{set ? "connected" : "not set"}</span>
+        <span className="set-pill-val">{statusLabel}</span>
       </button>
       {expanded && (
         <div className="set-pill-body">

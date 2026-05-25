@@ -1,4 +1,4 @@
-import type { AdminSettings, Aircraft, CoveragePoint, LiveSnapshot, PublicConfig, SetupState, Stats } from "@qdrn/shared";
+import type { AdminSettings, Aircraft, Connections, CoveragePoint, LiveSnapshot, PublicConfig, SetupState, Stats } from "@qdrn/shared";
 
 // Vite injects the configured base path (e.g. "/md/"); strip the trailing slash.
 export const BASE = import.meta.env.BASE_URL.replace(/\/+$/, "");
@@ -39,6 +39,7 @@ export const api = {
   saveAero: (pin: string, patch: { enabled?: boolean; cap?: number }) =>
     post<{ ok: boolean; aero: AdminSettings["aero"] }>("/setup/aeroapi", { pin, ...patch }),
   saveName: (pin: string, name: string) => post<{ ok: boolean; pilotName: string }>("/setup/name", { pin, name }),
+  connections: (pin: string, force?: boolean) => post<Connections>("/setup/connections", { pin, force }),
 };
 
 /** Connect to the live websocket, auto-reconnecting with backoff. */

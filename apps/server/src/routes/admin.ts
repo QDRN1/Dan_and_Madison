@@ -220,7 +220,7 @@ export default async function adminRoutes(app: FastifyInstance): Promise<void> {
   // the feeder.env keys file (feeding keeps working) — clear that over SSH if
   // re-gifting to a different person.
   app.post("/device/reset", async () => {
-    db.exec("DELETE FROM settings; DELETE FROM sightings; DELETE FROM flagged; DELETE FROM enrichment_cache; DELETE FROM coverage_daily;");
+    db.exec("DELETE FROM settings; DELETE FROM sightings; DELETE FROM flagged; DELETE FROM enrichment_cache; DELETE FROM coverage_range;");
     return { ok: true };
   });
 

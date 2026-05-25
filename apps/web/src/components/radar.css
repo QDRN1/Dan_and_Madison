@@ -471,6 +471,12 @@
 .set-pill.on .dot {
   background: var(--accent);
 }
+.set-pill.bad .dot {
+  background: var(--danger);
+}
+.set-pill.warn .dot {
+  background: #e0a83e;
+}
 .set-pill-val {
   margin-left: auto;
   color: var(--muted);
@@ -490,4 +496,21 @@
   text-align: left;
   margin-top: 8px;
   font-weight: 500;
+}
+
+.fr24-link {
+  display: block;
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--accent2);
+  font-weight: 700;
+  font-size: 13px;
+  text-align: center;
+  text-decoration: none;
+}
+.fr24-link:hover {
+  border-color: var(--accent2);
 }
