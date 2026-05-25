@@ -29,7 +29,7 @@
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
 }
 .brand-plate img {
-  height: 26px;
+  height: 34px;
   width: auto;
   display: block;
 }
@@ -43,7 +43,7 @@
     display: none;
   }
   .brand-plate img {
-    height: 22px;
+    height: 30px;
   }
 }
 .spacer {
