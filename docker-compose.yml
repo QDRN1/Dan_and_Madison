@@ -112,6 +112,8 @@ services:
       - ./docker-compose.yml:/app/stack/docker-compose.yml:ro
       - ./.env:/app/stack/.env:ro
       - ./data:/app/stack/data
+      # Swap logo/brand art by editing ./brand — no image rebuild needed.
+      - ./brand:/app/brand:ro
 
   cloudflared:
     image: cloudflare/cloudflared:latest

@@ -57,9 +57,9 @@ const SETTING_KEYS = {
 } as const;
 
 export function getReceiver(): ReceiverInfo {
-  // Defaults: north Minneapolis (city-level). Overridden during onboarding.
-  const lat = Number(getSetting(SETTING_KEYS.receiverLat) ?? envNum("RECEIVER_LAT", 45.03));
-  const lon = Number(getSetting(SETTING_KEYS.receiverLon) ?? envNum("RECEIVER_LON", -93.3));
+  // Defaults: 3511 McKinley St NE, Minneapolis. Overridden by env / onboarding.
+  const lat = Number(getSetting(SETTING_KEYS.receiverLat) ?? envNum("RECEIVER_LAT", 45.0317));
+  const lon = Number(getSetting(SETTING_KEYS.receiverLon) ?? envNum("RECEIVER_LON", -93.2279));
   const city = getSetting(SETTING_KEYS.receiverCity) ?? env("RECEIVER_CITY", "Minneapolis, MN");
   const ringsRaw = getSetting(SETTING_KEYS.rangeRings) ?? env("RANGE_RINGS_NM", "50,100,150");
   const rangeRingsNm = ringsRaw
@@ -115,7 +115,7 @@ export function getBrand(): BrandConfig {
   return {
     name: "QDRN Radar",
     tagline: "Live aircraft over the area",
-    logoUrl: `${BASE_PATH}/brand/QDRN%20Radar%20Long.png`,
+    logoUrl: `${BASE_PATH}/brand/QDRN%20Radar.png`,
     captainUrl: `${BASE_PATH}/brand/CaptainQIcon-BGRVD.PNG`,
     colors: {
       bg: "#001533", // deep navy, derived from brand blue

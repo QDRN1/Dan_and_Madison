@@ -96,12 +96,25 @@ export function MapView(): JSX.Element {
     if (!map.getSource("receiver")) {
       map.addSource("receiver", { type: "geojson", data: { type: "Point", coordinates: [receiver.lon, receiver.lat] } });
     }
+    if (!map.getLayer("receiver-halo")) {
+      map.addLayer({
+        id: "receiver-halo",
+        type: "circle",
+        source: "receiver",
+        paint: {
+          "circle-radius": 22,
+          "circle-color": "rgba(163,201,64,0.18)",
+          "circle-stroke-color": "rgba(163,201,64,0.55)",
+          "circle-stroke-width": 1.5,
+        },
+      });
+    }
     if (!map.getLayer("receiver")) {
       map.addLayer({
         id: "receiver",
         type: "circle",
         source: "receiver",
-        paint: { "circle-radius": 6, "circle-color": "#a3c940", "circle-stroke-color": col.marker, "circle-stroke-width": 2 },
+        paint: { "circle-radius": 9, "circle-color": "#a3c940", "circle-stroke-color": col.marker, "circle-stroke-width": 3 },
       });
     }
 
@@ -245,7 +258,7 @@ export function MapView(): JSX.Element {
       container: containerRef.current,
       style: config.mapStyle[t],
       center: [receiver.lon, receiver.lat],
-      zoom: 7,
+      zoom: 8,
       attributionControl: { compact: true },
     });
     map.addControl(new maplibregl.NavigationControl({ showCompass: true }), "bottom-right");
