@@ -29,6 +29,9 @@ interface RawAircraft {
 class AircraftStore extends EventEmitter {
   private aircraft = new Map<string, Aircraft>();
   private trails = new Map<string, TrailPoint[]>();
+  // Callsign each aircraft was last enriched for, so we re-enrich once the
+  // callsign is decoded (it often appears a few ticks after first contact).
+  private enrichedFor = new Map<string, string>();
   private messageRate = 0;
   private timer?: NodeJS.Timeout;
   private lastNow = 0;
@@ -124,8 +127,12 @@ class AircraftStore extends EventEmitter {
 
       this.aircraft.set(hex, ac);
 
-      // Kick off enrichment for anything not yet enriched (cheap; cached + deduped).
-      if (!ac.enrichment) {
+      // Enrich on first contact, then re-enrich once a callsign is decoded so
+      // the route (which needs the callsign) gets filled in. Cheap: cached + deduped.
+      const cs = ac.flight ?? "";
+      const lacksRoute = !ac.enrichment || (!ac.enrichment.route && cs.length > 0);
+      if (lacksRoute && this.enrichedFor.get(hex) !== cs) {
+        this.enrichedFor.set(hex, cs);
         void enrich(hex, ac.flight).then((e) => {
           if (!e) return;
           const cur = this.aircraft.get(hex);
@@ -145,6 +152,7 @@ class AircraftStore extends EventEmitter {
       if (!seen.has(hex) && (ac.seen ?? 0) > 60) {
         this.aircraft.delete(hex);
         this.trails.delete(hex);
+        this.enrichedFor.delete(hex);
       }
     }
 

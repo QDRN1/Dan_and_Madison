@@ -41,14 +41,26 @@ export function connectLive(onSnapshot: (s: LiveSnapshot) => void): () => void {
   let ws: WebSocket | null = null;
   let closed = false;
   let backoff = 1000;
+  let lastMsg = Date.now();
+  // Generation guard: a stale socket's late events can't reconnect or deliver
+  // data once we've moved on to a newer connection.
+  let gen = 0;
 
   const proto = location.protocol === "https:" ? "wss" : "ws";
   const url = `${proto}://${location.host}${API}/live`;
+  // The server pushes a snapshot every ~1s; if we hear nothing for this long the
+  // connection is almost certainly dead (some proxies drop it without a close
+  // frame, so onclose never fires) — force a fresh one.
+  const STALE_MS = 12_000;
 
   const open = () => {
     if (closed) return;
+    const myGen = ++gen;
+    lastMsg = Date.now();
     ws = new WebSocket(url);
     ws.onmessage = (ev) => {
+      if (myGen !== gen) return;
+      lastMsg = Date.now();
       try {
         const msg = JSON.parse(ev.data);
         if (msg.type === "snapshot") onSnapshot(msg.data as LiveSnapshot);
@@ -57,19 +69,41 @@ export function connectLive(onSnapshot: (s: LiveSnapshot) => void): () => void {
       }
     };
     ws.onopen = () => {
-      backoff = 1000;
+      if (myGen === gen) backoff = 1000;
     };
     ws.onclose = () => {
-      if (closed) return;
+      if (closed || myGen !== gen) return;
       setTimeout(open, backoff);
       backoff = Math.min(backoff * 2, 15000);
     };
-    ws.onerror = () => ws?.close();
+    ws.onerror = () => {
+      try {
+        ws?.close();
+      } catch {
+        /* ignore */
+      }
+    };
   };
   open();
 
+  const watchdog = setInterval(() => {
+    if (closed) return;
+    if (Date.now() - lastMsg > STALE_MS) {
+      // open() bumps gen, neutralizing the old socket's handlers, so this can't
+      // double-connect even if the dead socket's onclose fires later.
+      try {
+        ws?.close();
+      } catch {
+        /* ignore */
+      }
+      open();
+    }
+  }, 4000);
+
   return () => {
     closed = true;
+    gen++;
+    clearInterval(watchdog);
     ws?.close();
   };
 }
