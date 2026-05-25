@@ -51,6 +51,8 @@ if ! command -v wifi-connect >/dev/null 2>&1; then
     echo "wifi-connect install skipped (no network?). Re-run later."
 fi
 log "Installing QDRN captive-portal service"
+install -m 755 "$REPO_DIR/provisioning/wifi-connect/qdrn-portal.sh" \
+  /usr/local/sbin/qdrn-portal.sh
 install -m 644 "$REPO_DIR/provisioning/wifi-connect/qdrn-wifi-connect.service" \
   /etc/systemd/system/qdrn-wifi-connect.service
 systemctl daemon-reload

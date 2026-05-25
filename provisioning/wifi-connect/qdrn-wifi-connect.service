@@ -1,6 +1,6 @@
-# Brings up the QDRN-Radar-Setup captive portal when the Pi has no internet.
-# wifi-connect exits once the friend selects a network + it connects, after
-# which normal WiFi resumes. It re-arms on next boot if connectivity is lost.
+# Brings up the QDRN-Radar-Setup captive portal at boot, but only if offline.
+# The wrapper exits 0 when already connected, so there's no restart loop on a
+# Pi that's working normally. wifi-connect exits once the user picks a network.
 [Unit]
 Description=QDRN Radar WiFi captive portal (wifi-connect)
 After=NetworkManager.service
@@ -8,11 +8,8 @@ Wants=NetworkManager.service
 
 [Service]
 Type=simple
-# Only start the portal if we are NOT already online.
-ExecStartPre=/bin/sh -c 'nm-online -q -t 20 && exit 1 || exit 0'
-ExecStart=/usr/local/sbin/wifi-connect --portal-ssid "QDRN-Radar-Setup"
-Restart=on-failure
-RestartSec=10
+ExecStart=/usr/local/sbin/qdrn-portal.sh
+Restart=no
 
 [Install]
 WantedBy=multi-user.target

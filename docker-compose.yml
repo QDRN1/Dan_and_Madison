@@ -84,6 +84,10 @@ services:
     container_name: qdrn-radar
     restart: unless-stopped
     depends_on: [ultrafeeder]
+    ports:
+      # Local LAN access (e.g. http://<pi-ip>:8080/md). /md/admin stays gated by
+      # Cloudflare Access — direct LAN hits lack the header and get a 403.
+      - "8080:8080"
     environment:
       - NODE_ENV=production
       - BASE_PATH=${BASE_PATH:-/md}
