@@ -1,10 +1,17 @@
 import type { Aircraft, FlaggedSighting, Stats } from "@qdrn/shared";
+import { TIMEZONE } from "./config.js";
 import { db } from "./db.js";
 
+// YYYY-MM-DD in the configured timezone. Uses Intl (ICU, always bundled with
+// Node) so named zones work without OS tzdata in the container.
+const dayFmt = new Intl.DateTimeFormat("en-CA", {
+  timeZone: TIMEZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
 function today(): string {
-  // Local YYYY-MM-DD
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return dayFmt.format(new Date());
 }
 
 const EMERGENCY_SQUAWKS = new Set(["7500", "7600", "7700"]);

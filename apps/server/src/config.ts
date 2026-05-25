@@ -19,6 +19,18 @@ export const BASE_PATH = (() => {
   return p;
 })();
 
+// Timezone for daily stat buckets (e.g. "America/Chicago"). Defaults to UTC;
+// falls back to UTC if the value isn't a valid IANA zone.
+export const TIMEZONE = (() => {
+  const tz = env("TZ", "UTC") || "UTC";
+  try {
+    new Intl.DateTimeFormat("en-CA", { timeZone: tz });
+    return tz;
+  } catch {
+    return "UTC";
+  }
+})();
+
 export const PORT = envNum("PORT", 8080);
 export const POLL_INTERVAL_MS = envNum("POLL_INTERVAL_MS", 1000);
 export const AIRCRAFT_JSON_URL = env(

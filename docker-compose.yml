@@ -90,6 +90,7 @@ services:
       - "8080:8080"
     environment:
       - NODE_ENV=production
+      - TZ=${TZ:-UTC}
       - BASE_PATH=${BASE_PATH:-/md}
       - PORT=8080
       - AIRCRAFT_JSON_URL=http://ultrafeeder/data/aircraft.json
