@@ -8,12 +8,14 @@ import {
   getAeroApiUsage,
   getApiKeys,
   getBrand,
+  getGatewayConfig,
   getPilotName,
   getReceiver,
   getSetupPin,
   isPinSet,
   setAeroApiConfig,
   setApiKey,
+  setGatewayConfig,
   setPilotName,
   setReceiver,
   setSetupPin,
@@ -133,8 +135,18 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
         piawareFeederId: k.piawareFeederId ?? "",
       },
       aero: aeroStatus(),
+      gateway: getGatewayConfig(),
     };
     return settings;
+  });
+
+  app.post<{ Body: { pin?: string; url?: string; key?: string } }>("/setup/gateway", async (req, reply) => {
+    if (!pinOk(req.body?.pin)) return reply.code(401).send({ error: "bad_pin" });
+    setGatewayConfig({ url: req.body?.url, key: req.body?.key });
+    // Switching the route source — drop cached free routes so the gateway applies.
+    clearEnrichmentCache();
+    store.resetEnrichment();
+    return { ok: true, gateway: getGatewayConfig() };
   });
 
   app.post<{ Body: { pin?: string; enabled?: boolean; cap?: number } }>("/setup/aeroapi", async (req, reply) => {

@@ -79,6 +79,8 @@ const SETTING_KEYS = {
   aeroEnabled: "aeroapi.enabled",
   aeroCap: "aeroapi.monthlyCap",
   aeroUsage: "aeroapi.usage",
+  gatewayUrl: "gateway.url",
+  gatewayKey: "gateway.key",
 } as const;
 
 export function getReceiver(): ReceiverInfo {
@@ -195,11 +197,35 @@ export function recordAeroApiCall(): void {
   setSetting(SETTING_KEYS.aeroUsage, JSON.stringify({ month: u.month, count: u.count + 1 }));
 }
 
-/** Whether a paid AeroAPI lookup is currently permitted (key + switch + cap). */
+// ─── Shared API gateway ──────────────────────────────────────────────────────
+// Optional: route paid lookups through a gateway you control (ops.qdrn.io) that
+// holds the real upstream credentials and meters usage across devices. When set,
+// the gateway is the source of truth for quotas (we skip the local cap).
+
+export function getGatewayConfig(): { url: string; key: string } {
+  return {
+    url: (getSetting(SETTING_KEYS.gatewayUrl) ?? env("GATEWAY_URL")).trim().replace(/\/+$/, ""),
+    key: (getSetting(SETTING_KEYS.gatewayKey) ?? env("GATEWAY_KEY")).trim(),
+  };
+}
+
+export function setGatewayConfig(patch: { url?: string; key?: string }): void {
+  if (typeof patch.url === "string") setSetting(SETTING_KEYS.gatewayUrl, patch.url.trim().replace(/\/+$/, ""));
+  if (typeof patch.key === "string") setSetting(SETTING_KEYS.gatewayKey, patch.key.trim());
+}
+
+export function usingGateway(): boolean {
+  const g = getGatewayConfig();
+  return Boolean(g.url && g.key);
+}
+
+/** Whether a paid lookup is currently permitted (gateway, or local key+switch+cap). */
 export function paidLookupsAllowed(): boolean {
-  if (!getApiKeys().flightAwareAeroApi) return false;
-  const { enabled, cap } = getAeroApiConfig();
+  const { enabled } = getAeroApiConfig();
   if (!enabled) return false;
+  if (usingGateway()) return true; // the gateway enforces its own quota
+  if (!getApiKeys().flightAwareAeroApi) return false;
+  const { cap } = getAeroApiConfig();
   if (cap > 0 && readUsage().count >= cap) return false;
   return true;
 }

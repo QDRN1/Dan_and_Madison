@@ -40,6 +40,8 @@ export const api = {
     post<{ ok: boolean; aero: AdminSettings["aero"] }>("/setup/aeroapi", { pin, ...patch }),
   saveName: (pin: string, name: string) => post<{ ok: boolean; pilotName: string }>("/setup/name", { pin, name }),
   connections: (pin: string, force?: boolean) => post<Connections>("/setup/connections", { pin, force }),
+  saveGateway: (pin: string, url: string, key: string) =>
+    post<{ ok: boolean; gateway: { url: string; key: string } }>("/setup/gateway", { pin, url, key }),
 };
 
 /** Connect to the live websocket, auto-reconnecting with backoff. */

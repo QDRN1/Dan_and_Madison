@@ -151,8 +151,11 @@ export function Settings(): JSX.Element {
         ))}
       </div>
 
-      {/* AeroAPI usage + spend guard */}
-      <AeroSection pin={pin} aero={s.aero} onChanged={() => void load(pin)} />
+      {/* Shared API gateway */}
+      <GatewaySection pin={pin} gateway={s.gateway} onSaved={() => void load(pin)} />
+
+      {/* AeroAPI usage + spend guard (direct mode; the gateway meters its own) */}
+      {!(s.gateway.url && s.gateway.key) && <AeroSection pin={pin} aero={s.aero} onChanged={() => void load(pin)} />}
 
       {/* WiFi */}
       <div className="set-card">
@@ -254,6 +257,30 @@ function KeyPill({
           <button className="btn btn-primary" style={{ marginTop: 8 }} onClick={() => void onSave(draft.trim())}>Save</button>
         </div>
       )}
+    </div>
+  );
+}
+
+function GatewaySection({
+  pin, gateway, onSaved,
+}: { pin: string; gateway: AdminSettings["gateway"]; onSaved: () => void }): JSX.Element {
+  const [url, setUrl] = useState(gateway.url);
+  const [key, setKey] = useState(gateway.key);
+  const [saved, setSaved] = useState(false);
+  const on = Boolean(gateway.url && gateway.key);
+  return (
+    <div className="set-card">
+      <div className="label" style={{ marginTop: 0, display: "flex", alignItems: "center", gap: 8 }}>
+        Shared API gateway <span className={`pill${on ? "" : " danger"}`}>{on ? "active" : "off"}</span>
+      </div>
+      <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
+        Route paid lookups through your gateway (ops.qdrn.io) instead of a local key. Leave blank to use a local key.
+      </p>
+      <input className="input" style={{ marginBottom: 8 }} placeholder="https://ops.qdrn.io" value={url} onChange={(e) => { setUrl(e.target.value); setSaved(false); }} />
+      <input className="input" placeholder="Device key" value={key} onChange={(e) => { setKey(e.target.value); setSaved(false); }} />
+      <button className="btn btn-primary" style={{ marginTop: 8 }} onClick={async () => { await api.saveGateway(pin, url.trim(), key.trim()); setSaved(true); onSaved(); }}>
+        {saved ? "Saved ✓" : "Save gateway"}
+      </button>
     </div>
   );
 }

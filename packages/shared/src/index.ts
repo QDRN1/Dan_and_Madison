@@ -84,6 +84,7 @@ export type EnrichmentSource =
   | "hexdb"
   | "flightaware"
   | "flightradar24"
+  | "gateway"
   | "cache";
 
 export interface Airport {
@@ -215,6 +216,8 @@ export interface AdminSettings {
     piawareFeederId: string;
   };
   aero: AeroApiStatus;
+  /** Shared API gateway (ops.qdrn.io) this device routes paid lookups through. */
+  gateway: { url: string; key: string };
 }
 
 export interface BrandConfig {

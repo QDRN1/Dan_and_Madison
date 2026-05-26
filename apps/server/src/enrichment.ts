@@ -1,5 +1,5 @@
 import type { Airport, Enrichment, Route } from "@qdrn/shared";
-import { ADSBDB_BASE, HEXDB_BASE, getApiKeys, paidLookupsAllowed, recordAeroApiCall } from "./config.js";
+import { ADSBDB_BASE, HEXDB_BASE, getApiKeys, getGatewayConfig, paidLookupsAllowed, recordAeroApiCall } from "./config.js";
 import { db } from "./db.js";
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h — registrations/types rarely change
@@ -75,11 +75,12 @@ export async function enrich(
   const cached = cacheGet.get(hex, callsign) as { data: string; fetched_at: number } | undefined;
   if (cached && Date.now() - cached.fetched_at < CACHE_TTL_MS) {
     const e = JSON.parse(cached.data) as Enrichment;
+    const accurate = e.route?.source === "flightaware" || e.route?.source === "gateway";
     const wantUpgrade =
       paid &&
       callsign.length > 0 &&
       paidLookupsAllowed() &&
-      e.route?.source !== "flightaware" &&
+      !accurate &&
       Date.now() - (e.paidCheckedAt ?? 0) > PAID_RETRY_MS;
     if (!wantUpgrade) return { ...e, source: "cache" };
     return upgradeWithPaid(hex, callsign, e);
@@ -102,8 +103,7 @@ export async function enrich(
 /** Add (or replace) the route with an AeroAPI flight plan on an already-cached
  *  enrichment, recording the attempt so we don't keep re-querying. */
 async function upgradeWithPaid(hex: string, callsign: string, e: Enrichment): Promise<Enrichment> {
-  const fa = getApiKeys().flightAwareAeroApi;
-  const res = fa && paidLookupsAllowed() ? await flightAwareRoute(callsign, fa) : undefined;
+  const res = paidLookupsAllowed() ? await paidRoute(callsign) : undefined;
   const merged: Enrichment = {
     ...e,
     route: res?.route ?? e.route,
@@ -186,13 +186,20 @@ async function hexdbAircraft(hex: string): Promise<Partial<Enrichment> | undefin
 
 async function lookupRoute(callsign: string, paid: boolean): Promise<RouteResult | undefined> {
   if (paid && paidLookupsAllowed()) {
-    const fa = getApiKeys().flightAwareAeroApi;
-    if (fa) {
-      const r = await flightAwareRoute(callsign, fa);
-      if (r?.route) return r;
-    }
+    const r = await paidRoute(callsign);
+    if (r?.route) return r;
   }
   return (await adsbdbRoute(callsign)) ?? (await hexdbRoute(callsign));
+}
+
+/** The accurate (metered) route source: the shared gateway if configured,
+ *  otherwise a direct FlightAware/AeroAPI call with the local key. */
+async function paidRoute(callsign: string): Promise<RouteResult | undefined> {
+  const gw = getGatewayConfig();
+  if (gw.url && gw.key) return gatewayRoute(callsign, gw);
+  const fa = getApiKeys().flightAwareAeroApi;
+  if (fa) return flightAwareRoute(callsign, fa);
+  return undefined;
 }
 
 function adsbdbAirport(a: any): Airport | undefined {
@@ -299,5 +306,60 @@ async function flightAwareRoute(callsign: string, apiKey: string): Promise<Route
     operator: f.operator || undefined,
     operatorIcao: f.operator_icao || undefined,
     operatorIata: f.operator_iata || undefined,
+  };
+}
+
+// ─── Shared API gateway (ops.qdrn.io — normalized, provider-agnostic) ──────────
+// The gateway holds the real upstream credentials, picks a provider, meters/caps
+// usage, and returns ONE normalized shape so the radar doesn't care whether it's
+// backed by FR24, AeroAPI, etc. Contract (GET, device key as bearer):
+//   GET {gatewayUrl}/v1/route/{CALLSIGN}   Authorization: Bearer {deviceKey}
+//   200 {
+//     origin:      { iata, icao, name, city } | null,
+//     destination: { iata, icao, name, city } | null,
+//     airline:     { iata, icao, name } | null,
+//     times: { scheduledOut, estimatedOut, actualOut, scheduledIn, estimatedIn,
+//              actualIn, actualOff, progressPercent } | null
+//   }
+//   404 -> no route (fall back to free sources)   429 -> over quota   401/403 -> bad key
+async function gatewayRoute(callsign: string, gw: { url: string; key: string }): Promise<RouteResult | undefined> {
+  let j: any;
+  try {
+    const res = await fetch(`${gw.url}/v1/route/${encodeURIComponent(callsign)}`, {
+      headers: { Authorization: `Bearer ${gw.key}`, Accept: "application/json" },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    if (!res.ok) {
+      if (res.status !== 404) console.warn(`[gateway] ${callsign} -> ${res.status} ${res.statusText}`);
+      return undefined;
+    }
+    j = await res.json();
+  } catch (e) {
+    console.warn(`[gateway] ${callsign} request failed:`, (e as Error)?.message ?? e);
+    return undefined;
+  }
+  const airport = (a: any): Airport | undefined =>
+    a ? { icao: a.icao || undefined, iata: a.iata || undefined, name: a.name || undefined, city: a.city || undefined } : undefined;
+  const t = j?.times ?? {};
+  const route: Route = {
+    callsign,
+    origin: airport(j?.origin),
+    destination: airport(j?.destination),
+    source: "gateway",
+    scheduledOut: t.scheduledOut || undefined,
+    estimatedOut: t.estimatedOut || undefined,
+    actualOut: t.actualOut || undefined,
+    scheduledIn: t.scheduledIn || undefined,
+    estimatedIn: t.estimatedIn || undefined,
+    actualIn: t.actualIn || undefined,
+    actualOff: t.actualOff || undefined,
+    progressPercent: typeof t.progressPercent === "number" ? t.progressPercent : undefined,
+  };
+  if (!route.origin && !route.destination && !j?.airline) return undefined;
+  return {
+    route,
+    operator: j?.airline?.name || undefined,
+    operatorIcao: j?.airline?.icao || undefined,
+    operatorIata: j?.airline?.iata || undefined,
   };
 }
