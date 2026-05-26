@@ -185,13 +185,27 @@ export interface AeroApiStatus {
   keyPresent: boolean;
 }
 
-/** Real connection status per service for the Settings pills. */
-export type ConnStatus = "ok" | "invalid" | "error" | "down" | "unset" | "unknown";
+/** Real connection status per service for the Settings pills.
+ *  "blocked" = reachable + authenticated but over its quota/limit. */
+export type ConnStatus = "ok" | "invalid" | "error" | "down" | "blocked" | "unset" | "unknown";
+
+/** Gateway quota snapshot (from the gateway's /v1/status), for display. */
+export interface GatewayInfo {
+  name?: string;
+  used?: number;
+  limit?: number;
+  remaining?: number;
+  /** ISO8601 when the quota resets, or null for never/forever. */
+  resets?: string | null;
+}
+
 export interface Connections {
   flightAwareAeroApi: ConnStatus;
   flightRadar24Token: ConnStatus;
   fr24SharingKey: ConnStatus;
   piawareFeederId: ConnStatus;
+  gateway: ConnStatus;
+  gatewayInfo?: GatewayInfo;
 }
 
 /** Public, friend-facing config + setup state. */
