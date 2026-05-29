@@ -5,7 +5,10 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VERSION="${WIFI_CONNECT_VERSION:-v4.4.6}"
+# v4.4.6 (the long-time default) crashes on current Pi OS NetworkManager —
+# "RsnFlags ... wrong property type" — because NM changed the property type
+# years ago. v4.11.x handles both old and new.
+VERSION="${WIFI_CONNECT_VERSION:-v4.11.84}"
 
 # Pick the right release asset for this CPU. The Pi 4 on 64-bit Pi OS is aarch64;
 # balena's "-rpi" asset is 32-bit armv7 and will not run there.
