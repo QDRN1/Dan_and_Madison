@@ -56,23 +56,14 @@ fi
 # Let the default 'pi' user run docker without sudo
 usermod -aG docker "${SUDO_USER:-pi}" 2>/dev/null || true
 
-# ── 5. WiFi captive portal (balena wifi-connect) ─────────────────────────────
+# ── 5. WiFi captive portal (comitup) ─────────────────────────────────────────
 # Brings up a "QDRN-Radar-Setup" hotspot when the Pi can't reach WiFi, so the
-# friend can join it from their phone and pick their home network.
-if ! command -v wifi-connect >/dev/null 2>&1; then
-  log "Installing wifi-connect (captive portal)"
-  bash "$REPO_DIR/provisioning/wifi-connect/install-wifi-connect.sh" || \
-    echo "wifi-connect install skipped (no network?). Re-run later."
-fi
-log "Installing QDRN captive-portal service"
-install -m 755 "$REPO_DIR/provisioning/wifi-connect/qdrn-portal.sh" \
-  /usr/local/sbin/qdrn-portal.sh
-install -m 644 "$REPO_DIR/provisioning/wifi-connect/qdrn-wifi-connect.service" \
-  /etc/systemd/system/qdrn-wifi-connect.service
-systemctl daemon-reload
-systemctl enable qdrn-wifi-connect.service || true
-# Apply changes to the unit file immediately on re-runs.
-systemctl restart qdrn-wifi-connect.service 2>/dev/null || true
+# friend can join it from their phone and pick their home network. We use
+# comitup — balena/wifi-connect's RsnFlags D-Bus call crashes on current
+# Raspberry Pi OS NetworkManager (any version), comitup just works.
+log "Installing comitup captive portal"
+bash "$REPO_DIR/provisioning/comitup/install-comitup.sh" || \
+  echo "comitup install skipped (no network?). Re-run later."
 
 # ── 6. App config ────────────────────────────────────────────────────────────
 if [[ ! -f .env ]]; then
