@@ -14,14 +14,15 @@ fi
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# 1. Add Dave's apt repo (signed) if not already present.
-KEYRING=/usr/share/keyrings/davesteele-comitup.gpg
-LIST=/etc/apt/sources.list.d/davesteele-comitup.list
-if [[ ! -f "$LIST" ]]; then
+# 1. Configure Dave's apt repo + signing key via his official .deb package.
+#    This is the upstream-blessed way (see davesteele.github.io/comitup).
+APT_SOURCE_DEB_URL="https://davesteele.github.io/comitup/deb/davesteele-comitup-apt-source_1.3_all.deb"
+if ! dpkg -s davesteele-comitup-apt-source >/dev/null 2>&1; then
   echo "Adding davesteele comitup apt repo"
-  curl -fsSL https://davesteele.github.io/comitup/deb/davesteele.gpg | gpg --dearmor -o "$KEYRING"
-  chmod 644 "$KEYRING"
-  printf 'deb [signed-by=%s] https://davesteele.github.io/comitup/deb comitup main\n' "$KEYRING" > "$LIST"
+  TMP="$(mktemp -d)"
+  trap 'rm -rf "$TMP"' EXIT
+  curl -fsSL "$APT_SOURCE_DEB_URL" -o "$TMP/apt-source.deb"
+  dpkg -i --force-all "$TMP/apt-source.deb"
   apt-get update
 fi
 
@@ -32,7 +33,7 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y comitup comitup-web
 install -m 644 "$HERE/comitup.conf" /etc/comitup.conf
 
 # 4. Tear down the old balena/wifi-connect service if present (it's superseded).
-if systemctl list-unit-files qdrn-wifi-connect.service >/dev/null 2>&1; then
+if [[ -f /etc/systemd/system/qdrn-wifi-connect.service ]]; then
   systemctl disable --now qdrn-wifi-connect.service 2>/dev/null || true
   rm -f /etc/systemd/system/qdrn-wifi-connect.service
   systemctl daemon-reload
