@@ -1,6 +1,8 @@
-# Brings up the QDRN-Radar-Setup captive portal at boot, but only if offline.
-# The wrapper exits 0 when already connected, so there's no restart loop on a
-# Pi that's working normally. wifi-connect exits once the user picks a network.
+# Brings up the QDRN-Radar-Setup captive portal whenever the Pi is offline.
+# The wrapper exits 0 when online; systemd restarts it on a delay so the Pi
+# effectively polls and re-opens the portal if WiFi is removed/forgotten later.
+# When offline, wifi-connect runs the hotspot and blocks until the user picks a
+# network, then exits — and the poll cycle resumes.
 [Unit]
 Description=QDRN Radar WiFi captive portal (wifi-connect)
 After=NetworkManager.service
@@ -9,7 +11,8 @@ Wants=NetworkManager.service
 [Service]
 Type=simple
 ExecStart=/usr/local/sbin/qdrn-portal.sh
-Restart=no
+Restart=always
+RestartSec=60
 
 [Install]
 WantedBy=multi-user.target

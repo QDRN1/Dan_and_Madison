@@ -71,6 +71,8 @@ install -m 644 "$REPO_DIR/provisioning/wifi-connect/qdrn-wifi-connect.service" \
   /etc/systemd/system/qdrn-wifi-connect.service
 systemctl daemon-reload
 systemctl enable qdrn-wifi-connect.service || true
+# Apply changes to the unit file immediately on re-runs.
+systemctl restart qdrn-wifi-connect.service 2>/dev/null || true
 
 # ── 6. App config ────────────────────────────────────────────────────────────
 if [[ ! -f .env ]]; then
