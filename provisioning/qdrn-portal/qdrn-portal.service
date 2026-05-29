@@ -1,0 +1,12 @@
+[Unit]
+Description=QDRN captive-portal web UI (Flask)
+After=NetworkManager.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/sbin/qdrn-portal.py
+Restart=on-failure
+RestartSec=5
+# Bind :80 without running everything as root.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true

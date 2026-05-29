@@ -56,14 +56,15 @@ fi
 # Let the default 'pi' user run docker without sudo
 usermod -aG docker "${SUDO_USER:-pi}" 2>/dev/null || true
 
-# ── 5. WiFi captive portal (comitup) ─────────────────────────────────────────
+# ── 5. WiFi captive portal (QDRN-built: NM hotspot + Flask) ──────────────────
 # Brings up a "QDRN-Radar-Setup" hotspot when the Pi can't reach WiFi, so the
-# friend can join it from their phone and pick their home network. We use
-# comitup — balena/wifi-connect's RsnFlags D-Bus call crashes on current
-# Raspberry Pi OS NetworkManager (any version), comitup just works.
-log "Installing comitup captive portal"
-bash "$REPO_DIR/provisioning/comitup/install-comitup.sh" || \
-  echo "comitup install skipped (no network?). Re-run later."
+# friend can join it from their phone and pick their home network. Uses
+# NetworkManager's own AP code + a tiny Flask portal under our full control,
+# after both balena/wifi-connect and comitup hit blocking compatibility issues
+# on current Pi OS NetworkManager.
+log "Installing QDRN captive portal"
+bash "$REPO_DIR/provisioning/qdrn-portal/install-portal.sh" || \
+  echo "qdrn-portal install skipped (no network?). Re-run later."
 
 # ── 6. App config ────────────────────────────────────────────────────────────
 if [[ ! -f .env ]]; then

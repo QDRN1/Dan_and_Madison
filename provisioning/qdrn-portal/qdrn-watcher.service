@@ -1,0 +1,13 @@
+[Unit]
+Description=QDRN captive-portal watcher (toggles AP mode on connectivity loss)
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/sbin/qdrn-watcher.sh
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
