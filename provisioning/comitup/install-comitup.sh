@@ -26,8 +26,9 @@ if ! dpkg -s davesteele-comitup-apt-source >/dev/null 2>&1; then
   apt-get update
 fi
 
-# 2. Install comitup + its captive-portal web UI.
-DEBIAN_FRONTEND=noninteractive apt-get install -y comitup comitup-web
+# 2. Install comitup. The Flask captive-portal UI is bundled inside the
+#    comitup package itself — there's no separate "comitup-web" package.
+DEBIAN_FRONTEND=noninteractive apt-get install -y comitup
 
 # 3. Apply the QDRN SSID + settings.
 install -m 644 "$HERE/comitup.conf" /etc/comitup.conf
@@ -40,8 +41,8 @@ if [[ -f /etc/systemd/system/qdrn-wifi-connect.service ]]; then
 fi
 
 # 5. Enable + restart so the new config takes effect.
-systemctl enable comitup.service comitup-web.service 2>/dev/null || true
-systemctl restart comitup.service comitup-web.service
+systemctl enable comitup.service 2>/dev/null || true
+systemctl restart comitup.service
 
 echo
 echo "comitup is installed."
