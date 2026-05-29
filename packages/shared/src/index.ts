@@ -152,6 +152,8 @@ export interface Stats {
   topTypes: { type: string; count: number }[];
   /** Recent "interesting" sightings (mil, rare types, etc). */
   recentFlagged: FlaggedSighting[];
+  /** SoC temperature in °C if available (Raspberry Pi). */
+  cpuTempC?: number;
 }
 
 export interface FlaggedSighting {

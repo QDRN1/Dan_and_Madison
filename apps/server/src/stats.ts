@@ -1,6 +1,20 @@
+import { readFileSync } from "node:fs";
 import type { Aircraft, FlaggedSighting, Stats } from "@qdrn/shared";
 import { TIMEZONE } from "./config.js";
 import { db } from "./db.js";
+
+/** Read the Pi's SoC temperature in °C from the thermal sysfs node. Best-effort:
+ *  returns undefined on non-Linux/non-Pi or if the node isn't reachable. */
+function readCpuTempC(): number | undefined {
+  try {
+    const raw = readFileSync("/sys/class/thermal/thermal_zone0/temp", "utf8").trim();
+    const milli = Number(raw);
+    if (!Number.isFinite(milli) || milli <= 0) return undefined;
+    return Math.round((milli / 1000) * 10) / 10;
+  } catch {
+    return undefined;
+  }
+}
 
 // YYYY-MM-DD in the configured timezone. Uses Intl (ICU, always bundled with
 // Node) so named zones work without OS tzdata in the container.
@@ -129,5 +143,6 @@ export function getStats(current: number): Stats {
     topOperators,
     topTypes,
     recentFlagged,
+    cpuTempC: readCpuTempC(),
   };
 }

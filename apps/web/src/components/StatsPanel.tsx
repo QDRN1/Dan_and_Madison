@@ -27,6 +27,15 @@ export function StatsPanel(): JSX.Element {
         <Card label="Seen today" value={stats.todayUnique} />
         <Card label="Farthest today" value={`${stats.maxRangeNmToday} nm`} />
         <Card label="All-time" value={stats.allTimeUnique} />
+        {stats.cpuTempC != null && (
+          <div className="stat-card" style={{ gridColumn: "1 / -1" }}>
+            <div className="stat-big">
+              {stats.cpuTempC.toFixed(1)} °C{" "}
+              {stats.cpuTempC >= 60 && <span style={{ fontSize: 18 }} title="fan should be on">🌀</span>}
+            </div>
+            <div className="muted" style={{ fontSize: 12 }}>CPU temp</div>
+          </div>
+        )}
       </div>
 
       <Section title="Top operators today" rows={stats.topOperators.map((o) => [o.name, String(o.count)])} />
