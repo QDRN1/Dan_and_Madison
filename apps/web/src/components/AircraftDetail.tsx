@@ -165,7 +165,9 @@ function fmtClock(iso?: string): string {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  // Force 12-hour AM/PM regardless of locale — the rest of the UI is locked
+  // to 12-hour, this keeps the detail card's Departed/Arrives consistent.
+  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true });
 }
 
 function remaining(iso?: string): string {

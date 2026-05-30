@@ -1,6 +1,6 @@
 import { createConnection } from "node:net";
 import type { FastifyInstance } from "fastify";
-import type { AdminSettings, PublicConfig, SetupState, WifiNetwork } from "@qdrn/shared";
+import type { AdminSettings, PublicConfig, SetupState, WifiNetwork, WifiScanResult } from "@qdrn/shared";
 
 const NETD_SOCK = process.env.QDRN_NETD_SOCK ?? "/run/qdrn-net.sock";
 
@@ -234,6 +234,31 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
       }
     },
   );
+
+  app.post<{ Body: { pin?: string; name?: string; uuid?: string } }>(
+    "/setup/wifi/connect",
+    async (req, reply) => {
+      if (!pinOk(req.body?.pin)) return reply.code(401).send({ error: "bad_pin" });
+      const { name, uuid } = req.body ?? {};
+      if ((!name || !name.trim()) && (!uuid || !uuid.trim())) {
+        return reply.code(400).send({ ok: false, error: "name or uuid required" });
+      }
+      try {
+        return await netd<{ ok: boolean; error?: string }>({ op: "connect", name, uuid });
+      } catch (e) {
+        return reply.code(503).send({ ok: false, error: `netd unavailable: ${(e as Error).message}` });
+      }
+    },
+  );
+
+  app.post<{ Body: { pin?: string } }>("/setup/wifi/scan", async (req, reply) => {
+    if (!pinOk(req.body?.pin)) return reply.code(401).send({ error: "bad_pin" });
+    try {
+      return await netd<{ ok: boolean; networks: WifiScanResult[]; error?: string }>({ op: "scan" });
+    } catch (e) {
+      return reply.code(503).send({ ok: false, error: `netd unavailable: ${(e as Error).message}` });
+    }
+  });
 
   // Real connection status per service (token validity / feeder health).
   app.post<{ Body: { pin?: string; force?: boolean } }>("/setup/connections", async (req, reply) => {

@@ -96,6 +96,48 @@ def remove_wifi(req: dict) -> dict:
     return {"ok": True}
 
 
+def connect_wifi(req: dict) -> dict:
+    """Activate a saved NetworkManager profile (switch to it). Triggers a brief
+    WiFi handoff — the existing connection drops while NM brings up the new one."""
+    target = (req.get("uuid") or req.get("name") or "").strip()
+    if not target:
+        return {"ok": False, "error": "name or uuid required"}
+    r = shell(["nmcli", "connection", "up", target], timeout=45)
+    if r.returncode != 0:
+        return {"ok": False, "error": (r.stderr or r.stdout).strip() or "activation failed"}
+    return {"ok": True}
+
+
+def scan_wifi(_req: dict) -> dict:
+    """Force a fresh WiFi scan and return nearby APs (deduped, signal-sorted)."""
+    shell(["nmcli", "device", "wifi", "rescan"], timeout=12)
+    r = shell(["nmcli", "-t", "-f", "SSID,SECURITY,SIGNAL", "device", "wifi", "list"])
+    nets, seen = [], set()
+    for line in r.stdout.split("\n"):
+        if not line.strip():
+            continue
+        parts = line.split(":", 2)
+        if len(parts) < 3:
+            continue
+        ssid, sec, sig = parts[0], parts[1], parts[2]
+        # Drop empty (hidden) SSIDs, our own setup hotspot, and dups.
+        if not ssid or ssid in seen or ssid == "QDRN-Radar-Setup":
+            continue
+        seen.add(ssid)
+        try:
+            sig_i = int(sig)
+        except ValueError:
+            sig_i = 0
+        nets.append({
+            "ssid": ssid,
+            "secured": bool(sec) and sec not in ("--", "open"),
+            "security": sec or "open",
+            "signal": sig_i,
+        })
+    nets.sort(key=lambda n: -n["signal"])
+    return {"ok": True, "networks": nets}
+
+
 def handle(req: dict) -> dict:
     op = req.get("op")
     if op == "list":
@@ -104,6 +146,10 @@ def handle(req: dict) -> dict:
         return add_wifi(req)
     if op == "remove":
         return remove_wifi(req)
+    if op == "connect":
+        return connect_wifi(req)
+    if op == "scan":
+        return scan_wifi(req)
     return {"ok": False, "error": f"unknown op: {op!r}"}
 
 

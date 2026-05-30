@@ -514,3 +514,100 @@
 .fr24-link:hover {
   border-color: var(--accent2);
 }
+
+/* Drawer status row (date · time · CPU °F) */
+.drawer-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.drawer-status {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+.drawer-status-when {
+  letter-spacing: 0.02em;
+}
+.drawer-status-temp {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+/* WiFi list rows */
+.wifi-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.wifi-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  width: 100%;
+}
+.wifi-row.active {
+  background: rgba(163, 201, 64, 0.08);
+  border-color: rgba(163, 201, 64, 0.35);
+}
+.wifi-row-btn {
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+.wifi-row-btn:hover, .wifi-row-btn:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+.wifi-info {
+  flex: 1;
+  min-width: 0;
+}
+.wifi-name {
+  font-weight: 700;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wifi-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  box-shadow: none;
+  animation: none;
+}
+
+/* Reuse the same SVG-ish signal bars as the captive portal */
+.signal {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 14px;
+  flex-shrink: 0;
+}
+.signal .bar {
+  width: 3px;
+  background: rgba(159, 176, 201, 0.3);
+  border-radius: 1px;
+}
+.signal .b1 { height: 5px; }
+.signal .b2 { height: 8px; }
+.signal .b3 { height: 11px; }
+.signal .b4 { height: 14px; }
+.signal.s1 .b1,
+.signal.s2 .b1, .signal.s2 .b2,
+.signal.s3 .b1, .signal.s3 .b2, .signal.s3 .b3,
+.signal.s4 .bar { background: var(--accent); }

@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import "./radar.css";
+import { api } from "../api";
 import { useRadar } from "../store";
 import { MapView } from "./MapView";
 import { AircraftDetail } from "./AircraftDetail";
@@ -53,7 +54,8 @@ export function RadarView(): JSX.Element {
 
       <aside className={`drawer glass${open ? " open" : ""}`}>
         <div className="drawer-head">
-          <span className="drawer-title">Menu</span>
+          <span style={{ width: 42, flex: "0 0 auto" }} />
+          <DrawerStatus />
           <button className="iconbtn" onClick={() => setOpen(false)} aria-label="Close menu">
             ✕
           </button>
@@ -75,6 +77,42 @@ export function RadarView(): JSX.Element {
       </aside>
 
       <AircraftDetail />
+    </div>
+  );
+}
+
+/** Persistent status row at the top of the menu drawer: local date + 12-hour
+ *  time, and the Pi's SoC temp in °F. Stays visible across all tabs. */
+function DrawerStatus(): JSX.Element {
+  const [now, setNow] = useState(new Date());
+  const [tempC, setTempC] = useState<number | null>(null);
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    const load = () => api.stats().then((s) => alive && setTempC(s.cpuTempC ?? null)).catch(() => undefined);
+    load();
+    const t = setInterval(load, 30_000);
+    return () => { alive = false; clearInterval(t); };
+  }, []);
+
+  const dateStr = now.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+  const timeStr = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true });
+  const tempF = tempC != null ? Math.round(tempC * 9 / 5 + 32) : null;
+  const hot = tempF != null && tempF >= 140;
+
+  return (
+    <div className="drawer-status">
+      <span className="drawer-status-when">{dateStr} · {timeStr}</span>
+      {tempF != null && (
+        <span className="drawer-status-temp" style={{ color: hot ? "var(--danger)" : "var(--muted)" }}>
+          CPU {tempF}°F{hot ? " 🔥" : ""}
+        </span>
+      )}
     </div>
   );
 }

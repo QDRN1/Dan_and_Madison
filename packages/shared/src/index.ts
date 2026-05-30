@@ -197,6 +197,17 @@ export interface WifiNetwork {
   active: boolean;
 }
 
+/** A nearby broadcasting WiFi network from a fresh scan. */
+export interface WifiScanResult {
+  ssid: string;
+  /** True if the network requires a password. */
+  secured: boolean;
+  /** Raw nmcli SECURITY field (e.g. "WPA2", "open"). */
+  security: string;
+  /** Signal strength 0-100. */
+  signal: number;
+}
+
 /** Real connection status per service for the Settings pills.
  *  "blocked" = reachable + authenticated but over its quota/limit. */
 export type ConnStatus = "ok" | "invalid" | "error" | "down" | "blocked" | "unset" | "unknown";
