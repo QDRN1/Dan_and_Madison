@@ -30,7 +30,10 @@ export const api = {
   pinStatus: () => get<{ pinSet: boolean }>("/setup/pin-status"),
   setPin: (pin: string, currentPin?: string) =>
     post<{ ok: boolean }>("/setup/set-pin", { pin, currentPin }),
-  verifyPin: (pin: string) => post<{ ok: boolean }>("/setup/verify-pin", { pin }),
+  verifyPin: (pin: string) => post<{ ok: boolean; master: boolean }>("/setup/verify-pin", { pin }),
+  /** Master-PIN-gated: forces the user PIN back to the default. */
+  resetUserPin: (masterPin: string) =>
+    post<{ ok: boolean; pin: string }>("/setup/reset-user-pin", { pin: masterPin }),
   saveLocation: (pin: string, city: string, lat: number, lon: number, county?: string) =>
     post<{ ok: boolean; setup: SetupState }>("/setup/location", { pin, city, lat, lon, county }),
   saveKeys: (pin: string, keys: Record<string, string>) =>

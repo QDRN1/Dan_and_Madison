@@ -161,6 +161,9 @@ export function Settings(): JSX.Element {
 
       {/* AeroAPI usage + spend guard (direct mode; the gateway meters its own) */}
       {!(s.gateway.url && s.gateway.key) && <AeroSection pin={pin} aero={s.aero} onChanged={() => void load(pin)} />}
+
+      {/* Change PIN */}
+      <PinSection currentPin={pin} onChanged={(p) => { sessionStorage.setItem(PIN_KEY, p); setPin(p); }} />
     </div>
   );
 }
@@ -331,6 +334,72 @@ function SignalBars({ signal }: { signal?: number }): JSX.Element {
       <span className="bar b1" /><span className="bar b2" />
       <span className="bar b3" /><span className="bar b4" />
     </span>
+  );
+}
+
+function PinSection({ currentPin, onChanged }: { currentPin: string; onChanged: (newPin: string) => void }): JSX.Element {
+  const [cur, setCur] = useState("");
+  const [nxt, setNxt] = useState("");
+  const [conf, setConf] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const digits = (s: string) => s.replace(/\D/g, "").slice(0, 6);
+
+  async function change(): Promise<void> {
+    if (!/^\d{4,6}$/.test(nxt)) { setMsg("New PIN must be 4–6 digits."); return; }
+    if (nxt !== conf) { setMsg("New PINs don't match."); return; }
+    setBusy(true); setMsg("");
+    try {
+      const r = await api.setPin(nxt, cur);
+      if (r.ok) {
+        setMsg("PIN changed.");
+        setCur(""); setNxt(""); setConf("");
+        onChanged(nxt);
+      } else {
+        setMsg("Current PIN didn't match.");
+      }
+    } catch (e) {
+      setMsg(`Couldn't change: ${(e as Error).message}`);
+    } finally { setBusy(false); }
+  }
+
+  async function resetToDefault(): Promise<void> {
+    const master = window.prompt("Owner code required to reset the user PIN to default:");
+    if (!master) return;
+    setBusy(true); setMsg("");
+    try {
+      const r = await api.resetUserPin(master);
+      if (r.ok) {
+        setMsg(`User PIN reset to ${r.pin}.`);
+        onChanged(r.pin);
+      } else {
+        setMsg("Owner code didn't match.");
+      }
+    } catch (e) {
+      setMsg(`Reset failed: ${(e as Error).message}`);
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <div className="set-card">
+      <div className="label" style={{ marginTop: 0 }}>Change PIN</div>
+      <input className="input" inputMode="numeric" type="password" placeholder="Current PIN (or owner code)"
+             value={cur} onChange={(e) => { setCur(digits(e.target.value)); setMsg(""); }} />
+      <input className="input" inputMode="numeric" type="password" placeholder="New PIN (4–6 digits)" style={{ marginTop: 8 }}
+             value={nxt} onChange={(e) => { setNxt(digits(e.target.value)); setMsg(""); }} />
+      <input className="input" inputMode="numeric" type="password" placeholder="Confirm new PIN" style={{ marginTop: 8 }}
+             value={conf} onChange={(e) => { setConf(digits(e.target.value)); setMsg(""); }} />
+      <button className="btn btn-primary" style={{ marginTop: 8 }}
+              disabled={busy || !cur || !nxt || !conf} onClick={() => void change()}>
+        {busy ? "Saving…" : "Change PIN"}
+      </button>
+      <button className="btn" style={{ marginTop: 8, background: "transparent", borderStyle: "dashed", width: "100%" }}
+              disabled={busy} onClick={() => void resetToDefault()}>
+        Forgot PIN? Reset to default
+      </button>
+      {msg && <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>{msg}</div>}
+    </div>
   );
 }
 
