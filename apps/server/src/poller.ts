@@ -147,7 +147,7 @@ class AircraftStore extends EventEmitter {
       const lacksRoute = !ac.enrichment || (!ac.enrichment.route && cs.length > 0);
       if (lacksRoute && this.enrichedFor.get(hex) !== cs) {
         this.enrichedFor.set(hex, cs);
-        void enrich(hex, ac.flight).then((e) => {
+        void enrich(hex, ac.flight, { lat: ac.lat, lon: ac.lon, track: ac.track }).then((e) => {
           if (!e) return;
           const cur = this.aircraft.get(hex);
           if (cur) cur.enrichment = e;

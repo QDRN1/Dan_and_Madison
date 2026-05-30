@@ -1,6 +1,15 @@
 import type { Airport, Enrichment, Route } from "@qdrn/shared";
-import { ADSBDB_BASE, HEXDB_BASE, getApiKeys, getGatewayConfig, paidLookupsAllowed, recordAeroApiCall } from "./config.js";
+import {
+  ADSBDB_BASE,
+  HEXDB_BASE,
+  VRS_ROUTES_BASE,
+  getApiKeys,
+  getGatewayConfig,
+  paidLookupsAllowed,
+  recordAeroApiCall,
+} from "./config.js";
 import { db } from "./db.js";
+import { pickLeg } from "./geo.js";
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h — registrations/types rarely change
 const FETCH_TIMEOUT_MS = 6000;
@@ -14,6 +23,14 @@ interface RouteResult {
   operator?: string;
   operatorIcao?: string;
   operatorIata?: string;
+}
+
+/** Where an aircraft is right now — used to pick which leg of a multi-stop
+ *  callsign rotation it's actually flying. */
+interface PlanePos {
+  lat: number;
+  lon: number;
+  track?: number;
 }
 
 const cacheGet = db.prepare<[string, string]>(
@@ -66,9 +83,13 @@ function key(hex: string, callsign: string): string {
 export async function enrich(
   hex: string,
   flight?: string,
-  opts?: { paid?: boolean },
+  opts?: { paid?: boolean; lat?: number; lon?: number; track?: number },
 ): Promise<Enrichment | undefined> {
   const paid = opts?.paid ?? false;
+  const pos: PlanePos | undefined =
+    opts?.lat != null && opts?.lon != null
+      ? { lat: opts.lat, lon: opts.lon, track: opts.track }
+      : undefined;
   const callsign = (flight ?? "").trim().toUpperCase();
   const k = key(hex, callsign);
 
@@ -90,7 +111,7 @@ export async function enrich(
   const existing = inflight.get(ek);
   if (existing) return existing;
 
-  const p = doEnrich(hex, callsign, paid)
+  const p = doEnrich(hex, callsign, paid, pos)
     .then((e) => {
       if (e) cacheSet.run(hex, callsign, JSON.stringify(e), Date.now());
       return e;
@@ -116,10 +137,15 @@ async function upgradeWithPaid(hex: string, callsign: string, e: Enrichment): Pr
   return { ...merged, source: "cache" };
 }
 
-async function doEnrich(hex: string, callsign: string, paid: boolean): Promise<Enrichment | undefined> {
+async function doEnrich(
+  hex: string,
+  callsign: string,
+  paid: boolean,
+  pos?: PlanePos,
+): Promise<Enrichment | undefined> {
   const [aircraft, routeRes, photo] = await Promise.all([
     lookupAircraft(hex),
-    callsign ? lookupRoute(callsign, paid) : Promise.resolve(undefined),
+    callsign ? lookupRoute(callsign, paid, pos) : Promise.resolve(undefined),
     lookupPhoto(hex),
   ]);
   if (!aircraft && !routeRes?.route && !routeRes?.operatorIata && !photo) return undefined;
@@ -184,12 +210,34 @@ async function hexdbAircraft(hex: string): Promise<Partial<Enrichment> | undefin
 
 // ─── Route (callsign → origin/destination) ───────────────────────────────────
 
-async function lookupRoute(callsign: string, paid: boolean): Promise<RouteResult | undefined> {
+async function lookupRoute(
+  callsign: string,
+  paid: boolean,
+  pos?: PlanePos,
+): Promise<RouteResult | undefined> {
   if (paid && paidLookupsAllowed()) {
     const r = await paidRoute(callsign);
     if (r?.route) return r;
   }
-  return (await adsbdbRoute(callsign)) ?? (await hexdbRoute(callsign));
+  // Free path. adsb.lol carries the full (often multi-stop) rotation, so we use
+  // the aircraft's position to pick the leg it's actually flying — that beats a
+  // single canonical leg for planes mid-rotation. adsbdb supplies the airline
+  // name/IATA (adsb.lol's route file only has the airline ICAO). hexdb is no
+  // longer used for routes: its records are frozen ~2018 and have no leg
+  // awareness, so it could only ever surface a stale, wrong-leg guess.
+  const [lol, adb] = await Promise.all([adsblolRoute(callsign, pos), adsbdbRoute(callsign)]);
+  if (!lol) return adb;
+  if (!adb) return lol;
+  return {
+    route: {
+      ...lol.route!,
+      origin: lol.route?.origin ?? adb.route?.origin,
+      destination: lol.route?.destination ?? adb.route?.destination,
+    },
+    operator: adb.operator ?? lol.operator,
+    operatorIcao: lol.operatorIcao ?? adb.operatorIcao,
+    operatorIata: adb.operatorIata,
+  };
 }
 
 /** The accurate (metered) route source: the shared gateway if configured,
@@ -232,29 +280,45 @@ async function adsbdbRoute(callsign: string): Promise<RouteResult | undefined> {
   };
 }
 
-async function hexdbRoute(callsign: string): Promise<RouteResult | undefined> {
-  const j = await fetchJson(`${HEXDB_BASE}/route/icao/${encodeURIComponent(callsign)}`);
-  const routeStr: string | undefined = j?.route;
-  if (!routeStr || !routeStr.includes("-")) return undefined;
-  const [from, to] = routeStr.split("-");
-  const [origin, destination] = await Promise.all([
-    from ? hexdbAirport(from) : Promise.resolve(undefined),
-    to ? hexdbAirport(to) : Promise.resolve(undefined),
-  ]);
-  return { route: { callsign, origin, destination, source: "hexdb" } };
+// ─── adsb.lol routes (VRS standing-data, free, ODbL) ──────────────────────────
+// Static per-callsign JSON with the full rotation in `_airports` (each carries
+// icao/iata/name/location/country + lat/lon). We pick the leg by position.
+
+function adsblolAirport(a: any): Airport | undefined {
+  if (!a) return undefined;
+  return {
+    icao: a.icao || undefined,
+    iata: a.iata || undefined,
+    name: a.name || undefined,
+    city: a.location || undefined,
+    country: a.countryiso2 || undefined,
+    lat: typeof a.lat === "number" ? a.lat : undefined,
+    lon: typeof a.lon === "number" ? a.lon : undefined,
+  };
 }
 
-async function hexdbAirport(icao: string): Promise<Airport | undefined> {
-  const j = await fetchJson(`${HEXDB_BASE}/airport/icao/${encodeURIComponent(icao)}`);
-  if (!j) return { icao };
+async function adsblolRoute(callsign: string, pos?: PlanePos): Promise<RouteResult | undefined> {
+  const cs = callsign.toUpperCase();
+  const j = await fetchJson(
+    `${VRS_ROUTES_BASE}/${encodeURIComponent(cs.slice(0, 2))}/${encodeURIComponent(cs)}.json`,
+  );
+  const airports: any[] = Array.isArray(j?._airports) ? j._airports : [];
+  if (airports.length === 0) return undefined;
+  // NOTE: the leg is resolved from the position at first lookup and then cached
+  // for the (hex, callsign) pair. That's correct for a normal airborne leg; a
+  // callsign reused for a later leg within the cache window keeps the old one
+  // until re-enriched. AeroAPI (when enabled) supersedes this for opened flights.
+  const { origin, destination } = pos
+    ? pickLeg(pos, airports)
+    : { origin: airports[0], destination: airports[airports.length - 1] };
   return {
-    icao: j.icao || icao,
-    iata: j.iata || undefined,
-    name: j.airport || undefined,
-    city: j.region_name || undefined,
-    country: j.country_code || undefined,
-    lat: typeof j.latitude === "number" ? j.latitude : undefined,
-    lon: typeof j.longitude === "number" ? j.longitude : undefined,
+    route: {
+      callsign: cs,
+      origin: adsblolAirport(origin),
+      destination: adsblolAirport(destination),
+      source: "adsblol",
+    },
+    operatorIcao: j?.airline_code || undefined,
   };
 }
 

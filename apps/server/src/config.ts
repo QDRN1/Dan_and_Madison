@@ -49,6 +49,10 @@ export const MAP_STYLE_LIGHT = env(
 
 export const ADSBDB_BASE = env("ADSBDB_BASE", "https://api.adsbdb.com/v0");
 export const HEXDB_BASE = env("HEXDB_BASE", "https://hexdb.io/api/v1");
+// adsb.lol's static route dataset (VRS standing-data lineage). Files are served
+// per callsign at {base}/{first-2-chars}/{CALLSIGN}.json and carry the full
+// (often multi-stop) rotation, which we disambiguate by the aircraft's position.
+export const VRS_ROUTES_BASE = env("VRS_ROUTES_BASE", "https://vrs-standing-data.adsb.lol/routes");
 
 export const ADMIN_EMAILS = env("ADMIN_EMAILS", "")
   .split(",")

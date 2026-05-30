@@ -113,7 +113,7 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
     // Opening a flight is when we spend a (metered) AeroAPI query: upgrade the
     // route to a live flight plan. enrich() itself dedupes/rate-limits so
     // repeated opens of the same flight don't re-query.
-    const upgraded = await enrich(hex, ac.flight, { paid: true });
+    const upgraded = await enrich(hex, ac.flight, { paid: true, lat: ac.lat, lon: ac.lon, track: ac.track });
     if (upgraded) ac.enrichment = upgraded;
     return { ...ac, trail: store.getTrail(hex) };
   });

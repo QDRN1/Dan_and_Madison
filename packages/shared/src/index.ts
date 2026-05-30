@@ -81,6 +81,7 @@ export interface AircraftPhoto {
 
 export type EnrichmentSource =
   | "adsbdb"
+  | "adsblol"
   | "hexdb"
   | "flightaware"
   | "flightradar24"
