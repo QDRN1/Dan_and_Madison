@@ -187,6 +187,16 @@ export interface AeroApiStatus {
   keyPresent: boolean;
 }
 
+/** A NetworkManager WiFi connection profile (as seen by the host helper). */
+export interface WifiNetwork {
+  name: string;
+  uuid: string;
+  autoconnect: boolean;
+  priority: number;
+  /** True iff this profile is the one currently activated on wlan0. */
+  active: boolean;
+}
+
 /** Real connection status per service for the Settings pills.
  *  "blocked" = reachable + authenticated but over its quota/limit. */
 export type ConnStatus = "ok" | "invalid" | "error" | "down" | "blocked" | "unset" | "unknown";

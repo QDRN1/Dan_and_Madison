@@ -1,5 +1,32 @@
+import { createConnection } from "node:net";
 import type { FastifyInstance } from "fastify";
-import type { AdminSettings, PublicConfig, SetupState } from "@qdrn/shared";
+import type { AdminSettings, PublicConfig, SetupState, WifiNetwork } from "@qdrn/shared";
+
+const NETD_SOCK = process.env.QDRN_NETD_SOCK ?? "/run/qdrn-net.sock";
+
+/** One-shot JSON RPC to the host helper (qdrn-netd). */
+function netd<T = unknown>(req: Record<string, unknown>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const sock = createConnection(NETD_SOCK);
+    let buf = "";
+    let done = false;
+    const finish = (val: unknown, err?: Error) => {
+      if (done) return;
+      done = true;
+      try { sock.destroy(); } catch { /* ignore */ }
+      if (err) reject(err);
+      else resolve(val as T);
+    };
+    sock.on("data", (d) => { buf += d.toString(); });
+    sock.on("end", () => {
+      try { finish(JSON.parse(buf.trim() || "{}")); }
+      catch (e) { finish(null, e as Error); }
+    });
+    sock.on("error", (e) => finish(null, e));
+    sock.write(JSON.stringify(req) + "\n");
+    setTimeout(() => finish(null, new Error("netd timeout")), 30_000);
+  });
+}
 import {
   BASE_PATH,
   MAP_STYLE_DARK,
@@ -160,6 +187,53 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
     setPilotName(typeof req.body?.name === "string" ? req.body.name.trim() : "");
     return { ok: true, pilotName: getPilotName() };
   });
+
+  // ── Saved WiFi networks (proxied to qdrn-netd on the host) ──────────────
+  app.post<{ Body: { pin?: string } }>("/setup/wifi", async (req, reply) => {
+    if (!pinOk(req.body?.pin)) return reply.code(401).send({ error: "bad_pin" });
+    try {
+      return await netd<{ ok: boolean; networks: WifiNetwork[]; error?: string }>({ op: "list" });
+    } catch (e) {
+      return reply.code(503).send({ ok: false, error: `netd unavailable: ${(e as Error).message}` });
+    }
+  });
+
+  app.post<{ Body: { pin?: string; ssid?: string; password?: string; priority?: number } }>(
+    "/setup/wifi/add",
+    async (req, reply) => {
+      if (!pinOk(req.body?.pin)) return reply.code(401).send({ error: "bad_pin" });
+      const { ssid, password, priority } = req.body ?? {};
+      if (typeof ssid !== "string" || !ssid.trim()) {
+        return reply.code(400).send({ ok: false, error: "ssid required" });
+      }
+      try {
+        return await netd<{ ok: boolean; error?: string }>({
+          op: "add",
+          ssid: ssid.trim(),
+          password: typeof password === "string" ? password : "",
+          priority: typeof priority === "number" ? priority : 50,
+        });
+      } catch (e) {
+        return reply.code(503).send({ ok: false, error: `netd unavailable: ${(e as Error).message}` });
+      }
+    },
+  );
+
+  app.post<{ Body: { pin?: string; name?: string; uuid?: string } }>(
+    "/setup/wifi/remove",
+    async (req, reply) => {
+      if (!pinOk(req.body?.pin)) return reply.code(401).send({ error: "bad_pin" });
+      const { name, uuid } = req.body ?? {};
+      if ((!name || !name.trim()) && (!uuid || !uuid.trim())) {
+        return reply.code(400).send({ ok: false, error: "name or uuid required" });
+      }
+      try {
+        return await netd<{ ok: boolean; error?: string }>({ op: "remove", name, uuid });
+      } catch (e) {
+        return reply.code(503).send({ ok: false, error: `netd unavailable: ${(e as Error).message}` });
+      }
+    },
+  );
 
   // Real connection status per service (token validity / feeder health).
   app.post<{ Body: { pin?: string; force?: boolean } }>("/setup/connections", async (req, reply) => {

@@ -66,6 +66,13 @@ log "Installing QDRN captive portal"
 bash "$REPO_DIR/provisioning/qdrn-portal/install-portal.sh" || \
   echo "qdrn-portal install skipped (no network?). Re-run later."
 
+# ── 5b. Host network helper (qdrn-netd) ───────────────────────────────────────
+# Tiny systemd service exposing nmcli over /run/qdrn-net.sock so the radar's
+# Settings tab can add/remove saved WiFi profiles from inside its container.
+log "Installing qdrn-netd host helper"
+bash "$REPO_DIR/provisioning/qdrn-netd/install-netd.sh" || \
+  echo "qdrn-netd install skipped — re-run later."
+
 # ── 6. App config ────────────────────────────────────────────────────────────
 if [[ ! -f .env ]]; then
   log "Creating .env from .env.example — EDIT IT before going live"

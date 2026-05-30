@@ -1,0 +1,13 @@
+[Unit]
+Description=QDRN host network helper (nmcli over /run/qdrn-net.sock)
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/sbin/qdrn-netd.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

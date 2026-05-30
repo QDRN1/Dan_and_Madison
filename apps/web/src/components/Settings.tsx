@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { AdminSettings, ConnStatus, Connections, GatewayInfo } from "@qdrn/shared";
+import type { AdminSettings, ConnStatus, Connections, GatewayInfo, WifiNetwork } from "@qdrn/shared";
 import { BASE, api, geocodeCity, type GeoResult } from "../api";
 import { useRadar } from "../store";
 
@@ -152,6 +152,9 @@ export function Settings(): JSX.Element {
           />
         ))}
       </div>
+
+      {/* Saved WiFi networks */}
+      <WifiSection pin={pin} />
 
       {/* Shared API gateway */}
       <GatewaySection pin={pin} gateway={s.gateway} status={conn?.gateway} info={conn?.gatewayInfo} onSaved={() => void load(pin)} />
@@ -320,6 +323,118 @@ function GatewaySection({
       <button className="btn btn-primary" style={{ marginTop: 8 }} onClick={async () => { await api.saveGateway(pin, url.trim(), key.trim()); setSaved(true); onSaved(); }}>
         {saved ? "Saved ✓" : "Save gateway"}
       </button>
+    </div>
+  );
+}
+
+function WifiSection({ pin }: { pin: string }): JSX.Element {
+  const [nets, setNets] = useState<WifiNetwork[] | null>(null);
+  const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [ssid, setSsid] = useState("");
+  const [pw, setPw] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  async function refresh(): Promise<void> {
+    setLoading(true);
+    setErr("");
+    try {
+      const r = await api.wifiList(pin);
+      if (!r.ok) {
+        setErr(r.error ?? "couldn't list networks");
+        setNets([]);
+      } else {
+        setNets(r.networks ?? []);
+      }
+    } catch (e) {
+      setErr((e as Error).message);
+      setNets([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { void refresh(); /* eslint-disable-next-line */ }, []);
+
+  async function addOne(): Promise<void> {
+    const s = ssid.trim();
+    if (!s) return;
+    setBusy(true);
+    setMsg("");
+    try {
+      // New networks get priority 50 by default — between the user's saved
+      // home/office (~100) and emergency hotspots (~25). They can fine-tune
+      // later via nmcli if needed.
+      const r = await api.wifiAdd(pin, s, pw, 50);
+      if (r.ok) {
+        setSsid(""); setPw(""); setMsg(`Added "${s}"`);
+        await refresh();
+      } else {
+        setMsg(`Add failed: ${r.error ?? "unknown"}`);
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeOne(n: WifiNetwork): Promise<void> {
+    if (!window.confirm(`Remove the saved network "${n.name}"? The radar won't auto-join it anymore.`)) return;
+    setBusy(true);
+    try {
+      const r = await api.wifiRemove(pin, { uuid: n.uuid, name: n.name });
+      if (r.ok) await refresh();
+      else setMsg(`Remove failed: ${r.error ?? "unknown"}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="set-card">
+      <div className="label" style={{ marginTop: 0, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span>Saved WiFi networks</span>
+        <button className="btn" style={{ padding: "4px 10px", fontSize: 12 }} disabled={loading} onClick={() => void refresh()}>
+          {loading ? "…" : "Refresh"}
+        </button>
+      </div>
+
+      {err && <div className="muted" style={{ color: "var(--danger)", fontSize: 12, marginBottom: 8 }}>{err}</div>}
+
+      {nets && nets.length === 0 && !err && (
+        <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>None saved yet — add one below.</div>
+      )}
+
+      {nets && nets.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
+          {nets.map((n) => (
+            <div key={n.uuid || n.name}
+                 style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", border: "1px solid var(--border)", borderRadius: 8, background: n.active ? "rgba(163,201,64,0.08)" : "transparent" }}>
+              <span className={`dot ${n.active ? "" : "muted-dot"}`} style={{ background: n.active ? "var(--accent)" : "var(--muted)", animation: "none", boxShadow: "none" }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{n.name}</div>
+                <div className="muted" style={{ fontSize: 11 }}>
+                  {n.active ? "connected · " : ""}
+                  {n.autoconnect ? `auto · priority ${n.priority}` : "manual"}
+                </div>
+              </div>
+              <button className="btn" style={{ padding: "4px 10px", fontSize: 12 }} disabled={busy} onClick={() => void removeOne(n)}>
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="label" style={{ marginTop: 8 }}>Add a network</div>
+      <input className="input" style={{ marginBottom: 8 }} placeholder="SSID (network name)" value={ssid}
+             onChange={(e) => { setSsid(e.target.value); setMsg(""); }} />
+      <input className="input" type="password" placeholder="Password (leave blank if open)" value={pw}
+             onChange={(e) => { setPw(e.target.value); setMsg(""); }} />
+      <button className="btn btn-primary" style={{ marginTop: 8 }} disabled={busy || !ssid.trim()} onClick={() => void addOne()}>
+        {busy ? "Saving…" : "Add network"}
+      </button>
+      {msg && <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>{msg}</div>}
     </div>
   );
 }

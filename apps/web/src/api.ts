@@ -1,4 +1,4 @@
-import type { AdminSettings, Aircraft, Connections, CoveragePoint, LiveSnapshot, PublicConfig, SetupState, Stats } from "@qdrn/shared";
+import type { AdminSettings, Aircraft, Connections, CoveragePoint, LiveSnapshot, PublicConfig, SetupState, Stats, WifiNetwork } from "@qdrn/shared";
 
 // Vite injects the configured base path (e.g. "/md/"); strip the trailing slash.
 export const BASE = import.meta.env.BASE_URL.replace(/\/+$/, "");
@@ -42,6 +42,12 @@ export const api = {
   connections: (pin: string, force?: boolean) => post<Connections>("/setup/connections", { pin, force }),
   saveGateway: (pin: string, url: string, key: string) =>
     post<{ ok: boolean; gateway: { url: string; key: string } }>("/setup/gateway", { pin, url, key }),
+  wifiList: (pin: string) =>
+    post<{ ok: boolean; networks?: WifiNetwork[]; error?: string }>("/setup/wifi", { pin }),
+  wifiAdd: (pin: string, ssid: string, password: string, priority: number) =>
+    post<{ ok: boolean; error?: string }>("/setup/wifi/add", { pin, ssid, password, priority }),
+  wifiRemove: (pin: string, target: { name?: string; uuid?: string }) =>
+    post<{ ok: boolean; error?: string }>("/setup/wifi/remove", { pin, ...target }),
 };
 
 /** Connect to the live websocket, auto-reconnecting with backoff. */
