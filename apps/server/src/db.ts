@@ -60,6 +60,18 @@ db.exec(`
     lon        REAL NOT NULL,
     updated_at INTEGER NOT NULL
   );
+
+  -- Achievement unlocks (badges in the Achievements tab). Most are repeatable
+  -- ("you joined the Mile High Club 3 times"); a few are one-shots.
+  CREATE TABLE IF NOT EXISTS achievements (
+    id        TEXT PRIMARY KEY,
+    count     INTEGER NOT NULL DEFAULT 0,
+    first_at  INTEGER,
+    last_at   INTEGER
+  );
+
+  -- Faster sighting queries for the popout lists.
+  CREATE INDEX IF NOT EXISTS idx_sightings_dist ON sightings(max_dist_nm DESC);
 `);
 
 const getStmt = db.prepare<[string]>("SELECT value FROM settings WHERE key = ?");

@@ -165,6 +165,38 @@ export interface FlaggedSighting {
   at: number;
 }
 
+/** A single row in the popout list (today / all-time / farthest views). */
+export interface SightingRow {
+  hex: string;
+  flight?: string | null;
+  typeCode?: string | null;
+  typeName?: string | null;
+  operator?: string | null;
+  firstSeen?: number;
+  lastSeen?: number;
+  maxDistNm?: number;
+}
+
+/** Definition of an achievement badge (server-side; sent to the UI). */
+export interface AchievementDef {
+  id: string;
+  icon: string;
+  hint: string;
+  title: string;
+}
+
+/** What the UI sees per achievement — hint always, title+count once unlocked. */
+export interface AchievementProgress {
+  id: string;
+  icon: string;
+  hint: string;
+  /** Set only when count > 0 (so the UI keeps things mysterious). */
+  title?: string;
+  count: number;
+  firstAt?: number;
+  lastAt?: number;
+}
+
 /** Farthest tracked point for one bearing bucket, for the coverage outline. */
 export interface CoveragePoint {
   bearing: number;

@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import type { Stats } from "@qdrn/shared";
 import { api } from "../api";
 import { useRadar } from "../store";
+import { StatsDetail, type DetailKind } from "./StatsDetail";
 
 export function StatsPanel(): JSX.Element {
   const [stats, setStats] = useState<Stats | null>(null);
+  const [detail, setDetail] = useState<DetailKind | null>(null);
   const select = useRadar((s) => s.select);
 
   useEffect(() => {
@@ -23,17 +25,20 @@ export function StatsPanel(): JSX.Element {
   return (
     <div className="scroll" style={{ flex: 1, display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <Card label="In view now" value={stats.current} />
-        <Card label="Seen today" value={stats.todayUnique} />
-        <Card label="Farthest today" value={`${stats.maxRangeNmToday} nm`} />
-        <Card label="All-time" value={stats.allTimeUnique} />
+        <Card label="In view now"     value={stats.current}                    onClick={() => setDetail("in-view")} />
+        <Card label="Seen today"      value={stats.todayUnique}                onClick={() => setDetail("today")} />
+        <Card label="Farthest today"  value={`${stats.maxRangeNmToday} nm`}    onClick={() => setDetail("farthest")} />
+        <Card label="All-time"        value={stats.allTimeUnique}              onClick={() => setDetail("all-time")} />
       </div>
 
       <Section title="Top operators today" rows={stats.topOperators.map((o) => [o.name, String(o.count)])} />
       <Section title="Top aircraft types" rows={stats.topTypes.map((t) => [t.type, String(t.count)])} />
 
       <div>
-        <div className="label">Notable sightings</div>
+        <div className="label" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span>Notable sightings</span>
+          <button className="btn" style={{ padding: "3px 9px", fontSize: 11 }} onClick={() => setDetail("notable")}>See all</button>
+        </div>
         {stats.recentFlagged.length === 0 && <div className="muted" style={{ fontSize: 13 }}>None yet today.</div>}
         {stats.recentFlagged.map((f, i) => (
           <div key={i} className="list-row" onClick={() => select(f.hex)}>
@@ -45,16 +50,18 @@ export function StatsPanel(): JSX.Element {
           </div>
         ))}
       </div>
+
+      {detail && <StatsDetail kind={detail} onClose={() => setDetail(null)} />}
     </div>
   );
 }
 
-function Card({ label, value }: { label: string; value: string | number }): JSX.Element {
+function Card({ label, value, onClick }: { label: string; value: string | number; onClick?: () => void }): JSX.Element {
   return (
-    <div className="stat-card">
+    <button className="stat-card stat-card-btn" onClick={onClick} type="button">
       <div className="stat-big">{value}</div>
       <div className="muted" style={{ fontSize: 12 }}>{label}</div>
-    </div>
+    </button>
   );
 }
 

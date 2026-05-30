@@ -49,12 +49,13 @@ import {
   setReceiver,
   setSetupPin,
 } from "../config.js";
+import { listAchievements } from "../achievements.js";
 import { getConnections } from "../connections.js";
 import { getCoverage } from "../coverage.js";
 import { clearEnrichmentCache, enrich } from "../enrichment.js";
 import { applyFeedersInBackground, writeFeederEnv } from "../feeder.js";
 import { store } from "../poller.js";
-import { getStats } from "../stats.js";
+import { getStats, listAllTime, listFarthest, listNotable, listToday } from "../stats.js";
 
 function setupState(): SetupState {
   const keys = getApiKeys();
@@ -121,6 +122,28 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get("/coverage", async () => getCoverage());
+
+  // Popout lists for the clickable stat cards.
+  app.get<{ Querystring: { offset?: string; limit?: string } }>("/stats/today", async (req) => {
+    const offset = Math.max(0, Number(req.query.offset) || 0);
+    const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 50));
+    return listToday(offset, limit);
+  });
+  app.get<{ Querystring: { offset?: string; limit?: string } }>("/stats/all-time", async (req) => {
+    const offset = Math.max(0, Number(req.query.offset) || 0);
+    const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 50));
+    return listAllTime(offset, limit);
+  });
+  app.get<{ Querystring: { scope?: "today" | "all"; limit?: string } }>("/stats/farthest", async (req) => {
+    const scope = req.query.scope === "all" ? "all" : "today";
+    const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 50));
+    return listFarthest(scope, limit);
+  });
+  app.get<{ Querystring: { limit?: string } }>("/stats/notable", async (req) => {
+    const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 100));
+    return { rows: listNotable(limit) };
+  });
+  app.get("/achievements", async () => ({ achievements: listAchievements() }));
 
   // ── Friend-facing setup wizard (PIN-gated) ─────────────────────────────────
 

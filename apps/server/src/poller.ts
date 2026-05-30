@@ -4,7 +4,7 @@ import { AIRCRAFT_JSON_URL, POLL_INTERVAL_MS, getReceiver } from "./config.js";
 import { recordCoverage } from "./coverage.js";
 import { enrich } from "./enrichment.js";
 import { bearing, distanceNm } from "./geo.js";
-import { isFlagged, recordSighting } from "./stats.js";
+import { isFlagged, pruneOldSightings, recordSighting } from "./stats.js";
 
 const TRAIL_MAX_POINTS = 250;
 const TRAIL_MAX_AGE_MS = 45 * 60 * 1000;
@@ -175,6 +175,10 @@ class AircraftStore extends EventEmitter {
     }
 
     this.emit("snapshot", this.getSnapshot());
+
+    // Cheap, throttled inside (at most once/hr): keep the sightings table
+    // from growing unbounded by deleting rows older than the retention window.
+    pruneOldSightings();
   }
 
   private async fetchData(): Promise<{ now?: number; messages?: number; aircraft?: RawAircraft[] } | undefined> {

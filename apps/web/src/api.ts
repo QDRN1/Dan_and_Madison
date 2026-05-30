@@ -1,4 +1,4 @@
-import type { AdminSettings, Aircraft, Connections, CoveragePoint, LiveSnapshot, PublicConfig, SetupState, Stats, WifiNetwork, WifiScanResult } from "@qdrn/shared";
+import type { AchievementProgress, AdminSettings, Aircraft, Connections, CoveragePoint, FlaggedSighting, LiveSnapshot, PublicConfig, SetupState, SightingRow, Stats, WifiNetwork, WifiScanResult } from "@qdrn/shared";
 
 // Vite injects the configured base path (e.g. "/md/"); strip the trailing slash.
 export const BASE = import.meta.env.BASE_URL.replace(/\/+$/, "");
@@ -26,6 +26,11 @@ export const api = {
   snapshot: () => get<LiveSnapshot>("/aircraft"),
   stats: () => get<Stats>("/stats"),
   coverage: () => get<CoveragePoint[]>("/coverage"),
+  statsToday:    (offset = 0, limit = 100) => get<{ rows: SightingRow[]; total: number }>(`/stats/today?offset=${offset}&limit=${limit}`),
+  statsAllTime:  (offset = 0, limit = 100) => get<{ rows: SightingRow[]; total: number }>(`/stats/all-time?offset=${offset}&limit=${limit}`),
+  statsFarthest: (scope: "today" | "all" = "today", limit = 50) => get<{ rows: SightingRow[]; total: number }>(`/stats/farthest?scope=${scope}&limit=${limit}`),
+  statsNotable:  (limit = 100) => get<{ rows: FlaggedSighting[] }>(`/stats/notable?limit=${limit}`),
+  achievements:  () => get<{ achievements: AchievementProgress[] }>("/achievements"),
   setupState: () => get<SetupState>("/setup/state"),
   pinStatus: () => get<{ pinSet: boolean }>("/setup/pin-status"),
   setPin: (pin: string, currentPin?: string) =>

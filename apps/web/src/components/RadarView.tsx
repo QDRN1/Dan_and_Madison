@@ -4,12 +4,14 @@ import { api } from "../api";
 import { useRadar } from "../store";
 import { MapView } from "./MapView";
 import { AircraftDetail } from "./AircraftDetail";
+import { AchievementsPanel } from "./AchievementsPanel";
+import { FactBanner } from "./FactBanner";
 import { FlightList } from "./FlightList";
 import { StatsPanel } from "./StatsPanel";
 import { Settings } from "./Settings";
 import { ThemeToggle } from "./ThemeToggle";
 
-type Panel = "flights" | "stats" | "settings";
+type Panel = "flights" | "stats" | "achievements" | "settings";
 
 export function RadarView(): JSX.Element {
   const config = useRadar((s) => s.config);
@@ -62,9 +64,9 @@ export function RadarView(): JSX.Element {
         </div>
 
         <div className="drawer-tabs">
-          {(["flights", "stats", "settings"] as const).map((p) => (
-            <button key={p} className={`tab${panel === p ? " active" : ""}`} onClick={() => setPanel(p)}>
-              {p === "flights" ? "Flights" : p === "stats" ? "Stats" : "Settings"}
+          {(["flights", "stats", "achievements", "settings"] as const).map((p) => (
+            <button key={p} className={`tab${panel === p ? " active" : ""}`} onClick={() => setPanel(p)} title={p}>
+              {p === "flights" ? "Flights" : p === "stats" ? "Stats" : p === "achievements" ? "🏆" : "Settings"}
             </button>
           ))}
         </div>
@@ -72,11 +74,13 @@ export function RadarView(): JSX.Element {
         <div className="drawer-body">
           {panel === "flights" && <FlightList />}
           {panel === "stats" && <StatsPanel />}
+          {panel === "achievements" && <AchievementsPanel />}
           {panel === "settings" && <Settings />}
         </div>
       </aside>
 
       <AircraftDetail />
+      <FactBanner />
     </div>
   );
 }
