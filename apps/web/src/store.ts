@@ -24,6 +24,10 @@ function initialIconTheme(): IconTheme {
   return "plane";
 }
 
+function initialStorm(): boolean {
+  try { return localStorage.getItem("qdrn-storm") === "1"; } catch { return false; }
+}
+
 interface RadarState {
   config: PublicConfig | null;
   aircraft: Aircraft[];
@@ -34,6 +38,7 @@ interface RadarState {
   selectedTrail: TrailPoint[] | null;
   theme: Theme;
   iconTheme: IconTheme;
+  stormOverlay: boolean;
   setConfig: (c: PublicConfig) => void;
   applySnapshot: (s: LiveSnapshot) => void;
   select: (hex: string | null) => void;
@@ -41,6 +46,7 @@ interface RadarState {
   setTheme: (t: Theme) => void;
   toggleTheme: () => void;
   setIconTheme: (t: IconTheme) => void;
+  toggleStorm: () => void;
   selected: () => Aircraft | null;
 }
 
@@ -54,6 +60,7 @@ export const useRadar = create<RadarState>((set, get) => ({
   selectedTrail: null,
   theme: initialTheme(),
   iconTheme: initialIconTheme(),
+  stormOverlay: initialStorm(),
 
   setConfig: (config) => set({ config }),
 
@@ -71,6 +78,11 @@ export const useRadar = create<RadarState>((set, get) => ({
     try { localStorage.setItem("qdrn-icon-theme", iconTheme); } catch { /* ignore */ }
     set({ iconTheme });
   },
+  toggleStorm: () => set((s) => {
+    const next = !s.stormOverlay;
+    try { localStorage.setItem("qdrn-storm", next ? "1" : "0"); } catch { /* ignore */ }
+    return { stormOverlay: next };
+  }),
   selected: () => {
     const { selectedHex, byHex } = get();
     return selectedHex ? byHex[selectedHex] ?? null : null;

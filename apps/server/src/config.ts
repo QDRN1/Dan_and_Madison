@@ -81,6 +81,8 @@ const SETTING_KEYS = {
   aeroUsage: "aeroapi.usage",
   gatewayUrl: "gateway.url",
   gatewayKey: "gateway.key",
+  homeWifiFirstAt: "homeWifi.firstAt",
+  homeWifiName: "homeWifi.name",
 } as const;
 
 export function getReceiver(): ReceiverInfo {
@@ -255,4 +257,22 @@ export function getBrand(): BrandConfig {
       muted: "#9fb0c9",
     },
   };
+}
+
+/** Best-effort first-ever home WiFi memory: the first non-setup network the
+ *  user joins. Used to compute the Radar-versary milestone (one year from the
+ *  first home connection). Idempotent — never overwrites. */
+export function noteHomeWifi(ssid: string): void {
+  const s = ssid.trim();
+  if (!s || s === "QDRN-Radar-Setup") return;
+  if (getSetting(SETTING_KEYS.homeWifiFirstAt)) return;
+  setSetting(SETTING_KEYS.homeWifiFirstAt, String(Date.now()));
+  setSetting(SETTING_KEYS.homeWifiName, s);
+}
+
+export function getHomeWifi(): { name: string; firstAt: number } | null {
+  const at = getSetting(SETTING_KEYS.homeWifiFirstAt);
+  const name = getSetting(SETTING_KEYS.homeWifiName);
+  if (!at || !name) return null;
+  return { name, firstAt: Number(at) };
 }

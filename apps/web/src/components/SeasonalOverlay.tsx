@@ -1,25 +1,50 @@
 import { useEffect, useState } from "react";
+import { api } from "../api";
 import { useRadar } from "../store";
+
+interface Anniv {
+  configured: true;
+  name: string;
+  firstAt: number;
+  days: number;
+  years: number;
+  isAnniversary: boolean;
+}
 
 /** Date/time-driven visual easter eggs — kept in one place so they're easy to
  *  reason about and disable. Currently:
  *   • New Year's Day (Jan 1, all day, user-local): gold firework spark rain.
  *   • Within ±1 hour of local sunrise OR sunset: warm gradient tint at the
  *     edges of the screen so the map "feels" the golden hour.
- *   • Halloween (Oct 31, after dusk): subtle purple vignette. */
+ *   • Halloween (Oct 31, after dusk): subtle purple vignette.
+ *   • Radar-versary (anniversary of first home WiFi join): celebratory ribbon
+ *     + fireworks all day. */
 export function SeasonalOverlay(): JSX.Element | null {
   const rx = useRadar((s) => s.config?.receiver);
   const [tick, setTick] = useState(() => Date.now());
+  const [anniv, setAnniv] = useState<Anniv | null>(null);
+  const [dismissed, setDismissed] = useState<string>(() => {
+    try { return localStorage.getItem("qdrn-anniv-dismissed") ?? ""; } catch { return ""; }
+  });
 
   useEffect(() => {
-    // Re-evaluate every 5 min so we cross sunset/sunrise boundaries without a reload.
     const t = setInterval(() => setTick(Date.now()), 5 * 60 * 1000);
     return () => clearInterval(t);
   }, []);
 
+  useEffect(() => {
+    let alive = true;
+    api.anniversary()
+      .then((r) => { if (alive && r.configured) setAnniv(r as Anniv); })
+      .catch(() => undefined);
+    return () => { alive = false; };
+  }, [tick]);
+
   const now = new Date(tick);
   const isNewYear = now.getMonth() === 0 && now.getDate() === 1;
   const isHalloweenNight = now.getMonth() === 9 && now.getDate() === 31 && now.getHours() >= 17;
+  const todayKey = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
+  const isAnniv = anniv?.isAnniversary === true && dismissed !== todayKey;
 
   let goldenHour: "sunrise" | "sunset" | null = null;
   if (rx) {
@@ -32,13 +57,26 @@ export function SeasonalOverlay(): JSX.Element | null {
     }
   }
 
-  if (!isNewYear && !isHalloweenNight && !goldenHour) return null;
+  if (!isNewYear && !isHalloweenNight && !goldenHour && !isAnniv) return null;
 
   return (
     <>
       {goldenHour && <div className={`golden-tint ${goldenHour}`} aria-hidden="true" />}
       {isHalloweenNight && <div className="halloween-tint" aria-hidden="true" />}
-      {isNewYear && <FireworkRain />}
+      {(isNewYear || isAnniv) && <FireworkRain />}
+      {isAnniv && anniv && (
+        <div className="anniv-banner">
+          <span className="anniv-icon">🎂</span>
+          <span className="anniv-text">
+            <strong>Happy Radar-versary!</strong>
+            <span className="anniv-sub">{anniv.years} {anniv.years === 1 ? "year" : "years"} on {anniv.name}. Here's to many more.</span>
+          </span>
+          <button className="iconbtn" aria-label="Dismiss"
+                  onClick={() => { setDismissed(todayKey); try { localStorage.setItem("qdrn-anniv-dismissed", todayKey); } catch { /* ignore */ } }}>
+            ✕
+          </button>
+        </div>
+      )}
     </>
   );
 }

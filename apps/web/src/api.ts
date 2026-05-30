@@ -31,6 +31,10 @@ export const api = {
   statsFarthest: (scope: "today" | "all" = "today", limit = 50) => get<{ rows: SightingRow[]; total: number }>(`/stats/farthest?scope=${scope}&limit=${limit}`),
   statsNotable:  (limit = 100) => get<{ rows: FlaggedSighting[] }>(`/stats/notable?limit=${limit}`),
   achievements:  () => get<{ achievements: AchievementProgress[] }>("/achievements"),
+  anniversary:   () => get<
+    | { configured: false }
+    | { configured: true; name: string; firstAt: number; days: number; years: number; isAnniversary: boolean }
+  >("/anniversary"),
   setupState: () => get<SetupState>("/setup/state"),
   pinStatus: () => get<{ pinSet: boolean }>("/setup/pin-status"),
   setPin: (pin: string, currentPin?: string) =>

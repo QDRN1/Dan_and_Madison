@@ -960,3 +960,39 @@
   border-color: var(--accent);
   background: rgba(163, 201, 64, 0.08);
 }
+
+/* Radar-versary celebratory ribbon. Sits centered under the topbar. */
+.anniv-banner {
+  position: absolute;
+  top: calc(58px + env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, rgba(163, 201, 64, 0.95), rgba(91, 141, 239, 0.95));
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 14px;
+  color: #06122a;
+  font-size: 13px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  max-width: calc(100vw - 32px);
+  animation: anniv-pop 0.4s ease-out both;
+}
+.anniv-banner .iconbtn {
+  color: #06122a;
+  background: transparent;
+  border: none;
+}
+.anniv-icon { font-size: 26px; line-height: 1; }
+.anniv-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.anniv-sub { font-size: 12px; opacity: 0.85; }
+@keyframes anniv-pop {
+  from { transform: translate(-50%, -20px); opacity: 0; }
+  to   { transform: translate(-50%, 0);     opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .anniv-banner { animation: none; }
+}

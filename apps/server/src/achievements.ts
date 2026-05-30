@@ -8,7 +8,19 @@
  * unlock count for the ones the user has earned.
  */
 import type { Aircraft, AchievementDef, AchievementProgress } from "@qdrn/shared";
+import { getHomeWifi } from "./config.js";
 import { db } from "./db.js";
+
+/** Returns true if `now` is on or past the year-anniversary of the home WiFi
+ *  first connection, and the calendar MM-DD matches. Used by the Radar-versary
+ *  achievement and the client banner. */
+export function isRadarVersary(now: Date = new Date()): boolean {
+  const home = getHomeWifi();
+  if (!home) return false;
+  const first = new Date(home.firstAt);
+  if (now.getTime() - first.getTime() < 364 * 24 * 60 * 60 * 1000) return false;
+  return now.getMonth() === first.getMonth() && now.getDate() === first.getDate();
+}
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -177,6 +189,11 @@ const DEFS: (AchievementDef & {
     test: (c) => c.allTimeUnique >= 500 },
   { id: "kilo_club", icon: "🥇", hint: "Quad digit unique", title: "Kilo Club", once: true,
     test: (c) => c.allTimeUnique >= 1000 },
+
+  // Anniversary of the first home WiFi connection — quiet for a year, then
+  // unlocks on the calendar match. Repeats every year after that.
+  { id: "radarversary", icon: "🎂", hint: "One trip around the sun", title: "Radar-versary",
+    test: () => isRadarVersary() },
 ];
 
 // ─── Persistence ────────────────────────────────────────────────────────────

@@ -38,10 +38,12 @@ import {
   getApiKeys,
   getBrand,
   getGatewayConfig,
+  getHomeWifi,
   getPilotName,
   getReceiver,
   getSetupPin,
   isPinSet,
+  noteHomeWifi,
   setAeroApiConfig,
   setApiKey,
   setGatewayConfig,
@@ -144,6 +146,19 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
     return { rows: listNotable(limit) };
   });
   app.get("/achievements", async () => ({ achievements: listAchievements() }));
+
+  // Radar-versary banner data: the first home WiFi name + when it was joined,
+  // and whether today is its calendar anniversary.
+  app.get("/anniversary", async () => {
+    const home = getHomeWifi();
+    if (!home) return { configured: false as const };
+    const now = new Date();
+    const first = new Date(home.firstAt);
+    const days = Math.floor((now.getTime() - first.getTime()) / 86400000);
+    const years = now.getFullYear() - first.getFullYear() - (now.getMonth() < first.getMonth() || (now.getMonth() === first.getMonth() && now.getDate() < first.getDate()) ? 1 : 0);
+    const isAnniversary = years >= 1 && now.getMonth() === first.getMonth() && now.getDate() === first.getDate();
+    return { configured: true as const, name: home.name, firstAt: home.firstAt, days, years, isAnniversary };
+  });
 
   // ── Friend-facing setup wizard (PIN-gated) ─────────────────────────────────
 
@@ -253,12 +268,14 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(400).send({ ok: false, error: "ssid required" });
       }
       try {
-        return await netd<{ ok: boolean; error?: string }>({
+        const r = await netd<{ ok: boolean; error?: string }>({
           op: "add",
           ssid: ssid.trim(),
           password: typeof password === "string" ? password : "",
           priority: typeof priority === "number" ? priority : 50,
         });
+        if (r.ok) noteHomeWifi(ssid.trim());
+        return r;
       } catch (e) {
         return reply.code(503).send({ ok: false, error: `netd unavailable: ${(e as Error).message}` });
       }
@@ -290,7 +307,9 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(400).send({ ok: false, error: "name or uuid required" });
       }
       try {
-        return await netd<{ ok: boolean; error?: string }>({ op: "connect", name, uuid });
+        const r = await netd<{ ok: boolean; error?: string }>({ op: "connect", name, uuid });
+        if (r.ok && typeof name === "string" && name.trim()) noteHomeWifi(name.trim());
+        return r;
       } catch (e) {
         return reply.code(503).send({ ok: false, error: `netd unavailable: ${(e as Error).message}` });
       }

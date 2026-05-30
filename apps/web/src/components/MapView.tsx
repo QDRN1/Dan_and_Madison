@@ -105,6 +105,7 @@ export function MapView(): JSX.Element {
   const select = useRadar((s) => s.select);
   const theme = useRadar((s) => s.theme);
   const iconTheme = useRadar((s) => s.iconTheme);
+  const stormOverlay = useRadar((s) => s.stormOverlay);
 
   // Adds our sources + layers on top of whatever basemap style is loaded.
   // Idempotent: after a style switch the custom sources are gone, so we re-add.
@@ -430,6 +431,46 @@ export function MapView(): JSX.Element {
     updateSource();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [iconTheme]);
+
+  // Storm radar overlay (RainViewer). Fetch the latest frame timestamp, add
+  // a raster source/layer beneath the planes; refresh every 10 min while on.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !readyRef.current) return;
+
+    const removeLayer = () => {
+      if (map.getLayer("storm")) map.removeLayer("storm");
+      if (map.getSource("storm")) map.removeSource("storm");
+    };
+
+    if (!stormOverlay) { removeLayer(); return; }
+
+    let alive = true;
+    const apply = async () => {
+      try {
+        const r = await fetch("https://api.rainviewer.com/public/weather-maps.json");
+        if (!r.ok) return;
+        const j = (await r.json()) as { radar?: { past?: { time: number; path: string }[] } };
+        const last = j.radar?.past?.at(-1);
+        if (!alive || !last) return;
+        // Re-create the source with the fresh tile URL.
+        removeLayer();
+        map.addSource("storm", {
+          type: "raster",
+          tiles: [`https://tilecache.rainviewer.com${last.path}/256/{z}/{x}/{y}/2/1_1.png`],
+          tileSize: 256,
+          attribution: "Radar © RainViewer",
+        });
+        // Insert below our aircraft so planes stay on top.
+        const before = map.getLayer("ac-highlight") ? "ac-highlight" : undefined;
+        map.addLayer({ id: "storm", type: "raster", source: "storm", paint: { "raster-opacity": 0.55 } }, before);
+      } catch { /* offline / blocked — silently skip */ }
+    };
+    void apply();
+    const t = setInterval(() => void apply(), 10 * 60 * 1000);
+    return () => { alive = false; clearInterval(t); removeLayer(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stormOverlay, theme]);
 
   // Push live aircraft / selection to the map.
   useEffect(() => {

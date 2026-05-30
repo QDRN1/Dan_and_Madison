@@ -18,6 +18,8 @@ type Panel = "flights" | "stats" | "achievements" | "settings";
 export function RadarView(): JSX.Element {
   const config = useRadar((s) => s.config);
   const count = useRadar((s) => s.aircraft.filter((a) => a.lat != null).length);
+  const stormOn = useRadar((s) => s.stormOverlay);
+  const toggleStorm = useRadar((s) => s.toggleStorm);
   const [open, setOpen] = useState(false);
   const [panel, setPanel] = useState<Panel>("flights");
 
@@ -45,6 +47,14 @@ export function RadarView(): JSX.Element {
         <div className="live glass">
           <span className="dot" /> {count} <span className="muted" style={{ fontWeight: 600 }}>tracking</span>
         </div>
+        <button
+          className={`iconbtn glass${stormOn ? " active" : ""}`}
+          onClick={toggleStorm}
+          aria-label="Storm radar"
+          title={stormOn ? "Storm radar on (tap to hide)" : "Show storm radar"}
+        >
+          {stormOn ? "⛈️" : "🌦️"}
+        </button>
         <ThemeToggle className="glass" />
         <button
           className={`iconbtn glass${open ? " active" : ""}`}
