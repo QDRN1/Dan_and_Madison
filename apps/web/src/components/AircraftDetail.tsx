@@ -4,6 +4,22 @@ import { api } from "../api";
 import { useRadar } from "../store";
 import { altColor, altFeet, fmtAlt, fmtSpeed, fmtTrack, fmtVert, label } from "../format";
 
+/** Data-source credit shown under a route (adsb.lol's ODbL data needs attribution). */
+function routeCredit(source?: string): string | null {
+  switch (source) {
+    case "adsblol":
+      return "Route via adsb.lol (ODbL) · adsbdb";
+    case "adsbdb":
+      return "Route via adsbdb";
+    case "flightaware":
+      return "Route via FlightAware";
+    case "gateway":
+      return "Route via flight-data partner";
+    default:
+      return null;
+  }
+}
+
 export function AircraftDetail(): JSX.Element | null {
   const selectedHex = useRadar((s) => s.selectedHex);
   const live = useRadar((s) => (selectedHex ? s.byHex[selectedHex] : undefined));
@@ -106,6 +122,11 @@ export function AircraftDetail(): JSX.Element | null {
       {(origin?.city || dest?.city) && (
         <div className="muted" style={{ fontSize: 12, marginTop: -6 }}>
           {origin?.city ?? origin?.name ?? ""} → {dest?.city ?? dest?.name ?? ""}
+        </div>
+      )}
+      {(origin || dest) && routeCredit(r?.source) && (
+        <div className="muted" style={{ fontSize: 11, marginTop: 4, opacity: 0.65 }}>
+          {routeCredit(r?.source)}
         </div>
       )}
 

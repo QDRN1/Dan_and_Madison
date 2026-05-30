@@ -31,7 +31,7 @@ RTL-SDR ─► ultrafeeder (readsb + mlat) ─► aircraft.json
                  ├─► fr24feed  (FlightRadar24)  │
                  ├─► piaware   (FlightAware)    ▼
                  └─────────────────────►  qdrn-radar  (Node/Fastify + React/MapLibre)
-                                                │   • enrichment (adsbdb/hexdb + FA/FR24 keys)
+                                                │   • enrichment (routes: adsb.lol+adsbdb · aircraft: adsbdb/hexdb · +FA/FR24)
                                                 │   • stats (SQLite)  • setup wizard  • admin
                                                 ▼
                                           cloudflared ─► radar.qdrn.io/md  +  SSH
