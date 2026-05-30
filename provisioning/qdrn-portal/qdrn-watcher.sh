@@ -28,6 +28,23 @@ ensure_hotspot_profile() {
   fi
 }
 
+# Make sure phones on the AP can actually reach DHCP/DNS/HTTP on the Pi. Docker
+# (which the radar stack uses) leaves FORWARD policy DROP and nftables can ship
+# rules that block new INPUT on dynamically-created interfaces. Adding these
+# explicit ACCEPTs scoped to wlan0 is idempotent (we -C check before -I insert).
+ensure_hotspot_firewall() {
+  local proto port
+  for spec in "udp 53" "tcp 53" "udp 67" "tcp 80"; do
+    set -- $spec; proto="$1"; port="$2"
+    if ! iptables -C INPUT -i "$IFACE" -p "$proto" --dport "$port" -j ACCEPT 2>/dev/null; then
+      iptables -I INPUT 1 -i "$IFACE" -p "$proto" --dport "$port" -j ACCEPT 2>/dev/null || true
+    fi
+  done
+  if ! iptables -C INPUT -i "$IFACE" -p icmp -j ACCEPT 2>/dev/null; then
+    iptables -I INPUT 1 -i "$IFACE" -p icmp -j ACCEPT 2>/dev/null || true
+  fi
+}
+
 is_hotspot_active() {
   nmcli -t -f NAME,STATE connection show --active | grep -q "^${HOTSPOT_NAME}:activated$"
 }
@@ -57,6 +74,7 @@ while true; do
       nmcli connection up "$HOTSPOT_NAME" >/dev/null 2>&1 || true
       sleep 3
     fi
+    ensure_hotspot_firewall
     systemctl start "$PORTAL_SVC" 2>/dev/null || true
     sleep "$SLEEP_OFFLINE"
   fi

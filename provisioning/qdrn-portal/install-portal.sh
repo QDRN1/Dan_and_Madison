@@ -12,6 +12,7 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 
 # 1. Tear down comitup if it's still around (don't apt-remove — its postinst
 #    monkeys with NM and removal can leave the system in odd states).
@@ -32,7 +33,17 @@ install -m 644 "$HERE/qdrn-watcher.service"    /etc/systemd/system/qdrn-watcher.
 install -d -m 755                              /etc/NetworkManager/dnsmasq-shared.d
 install -m 644 "$HERE/qdrn-portal-shared.conf" /etc/NetworkManager/dnsmasq-shared.d/qdrn-portal.conf
 
-# 4. Make NetworkManager actually use dnsmasq for shared connections (it does
+# 4. Deploy brand assets the portal serves (real logo + SVG fallback + favicon).
+install -d -m 755 /usr/local/share/qdrn-portal/static
+if [[ -f "$REPO_ROOT/brand/QDRN Radar Long.png" ]]; then
+  install -m 644 "$REPO_ROOT/brand/QDRN Radar Long.png"  /usr/local/share/qdrn-portal/static/logo.png
+elif [[ -f "$REPO_ROOT/brand/QDRN Radar.png" ]]; then
+  install -m 644 "$REPO_ROOT/brand/QDRN Radar.png"       /usr/local/share/qdrn-portal/static/logo.png
+fi
+[[ -f "$REPO_ROOT/brand/logo.svg"    ]] && install -m 644 "$REPO_ROOT/brand/logo.svg"    /usr/local/share/qdrn-portal/static/logo.svg
+[[ -f "$REPO_ROOT/brand/favicon.svg" ]] && install -m 644 "$REPO_ROOT/brand/favicon.svg" /usr/local/share/qdrn-portal/static/favicon.svg
+
+# 5. Make NetworkManager actually use dnsmasq for shared connections (it does
 #    by default, but a `dns=` override in NetworkManager.conf can disable it).
 #    Drop a low-priority conf snippet to be safe.
 mkdir -p /etc/NetworkManager/conf.d
@@ -44,7 +55,7 @@ dns=dnsmasq
 EOF
 systemctl reload NetworkManager 2>/dev/null || systemctl restart NetworkManager || true
 
-# 5. Enable + start the watcher. Portal service is started/stopped by the
+# 6. Enable + start the watcher. Portal service is started/stopped by the
 #    watcher on demand (so it doesn't try to bind :80 when not in hotspot mode).
 systemctl daemon-reload
 systemctl enable qdrn-watcher.service
