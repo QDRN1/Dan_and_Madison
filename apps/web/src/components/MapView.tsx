@@ -433,7 +433,12 @@ export function MapView(): JSX.Element {
   }, [iconTheme]);
 
   // Storm radar overlay (RainViewer). Fetch the latest frame timestamp, add
-  // a raster source/layer beneath the planes; refresh every 10 min while on.
+  // a raster layer beneath the planes; refresh every 10 min while on.
+  // RainViewer's tiles top out around z9 — past that they're blank/blurry and
+  // make the map look broken. We fade the layer out between z8.5 and z11 so
+  // the rain is visible at metro zoom and silently disappears when you're
+  // street-level. Source `maxzoom: 8` lets MapLibre over-zoom existing tiles
+  // rather than request blank ones.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !readyRef.current) return;
@@ -453,17 +458,29 @@ export function MapView(): JSX.Element {
         const j = (await r.json()) as { radar?: { past?: { time: number; path: string }[] } };
         const last = j.radar?.past?.at(-1);
         if (!alive || !last) return;
-        // Re-create the source with the fresh tile URL.
         removeLayer();
         map.addSource("storm", {
           type: "raster",
           tiles: [`https://tilecache.rainviewer.com${last.path}/256/{z}/{x}/{y}/2/1_1.png`],
           tileSize: 256,
+          maxzoom: 8,
           attribution: "Radar © RainViewer",
         });
-        // Insert below our aircraft so planes stay on top.
         const before = map.getLayer("ac-highlight") ? "ac-highlight" : undefined;
-        map.addLayer({ id: "storm", type: "raster", source: "storm", paint: { "raster-opacity": 0.55 } }, before);
+        map.addLayer({
+          id: "storm",
+          type: "raster",
+          source: "storm",
+          maxzoom: 11,
+          paint: {
+            "raster-opacity": [
+              "interpolate", ["linear"], ["zoom"],
+              0, 0.55,
+              8.5, 0.55,
+              11, 0,
+            ],
+          },
+        }, before);
       } catch { /* offline / blocked — silently skip */ }
     };
     void apply();

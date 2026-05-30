@@ -173,9 +173,35 @@ export interface SightingRow {
   typeCode?: string | null;
   typeName?: string | null;
   operator?: string | null;
+  /** Origin airport code (ICAO preferred, IATA fallback) saved from enrichment. */
+  originIcao?: string | null;
+  destIcao?: string | null;
   firstSeen?: number;
   lastSeen?: number;
   maxDistNm?: number;
+}
+
+/** Server-side filters supported by the /stats/sightings popout endpoint. */
+export type SightingScope = "today" | "week" | "month" | "all";
+export type SightingSort = "recent" | "farthest" | "first";
+
+export interface SightingFilter {
+  scope?: SightingScope;
+  /** Free-text search over hex, callsign, operator, type. */
+  q?: string;
+  /** Exact operator name (from the operators dropdown). */
+  airline?: string;
+  /** Sort order. */
+  sort?: SightingSort;
+  offset?: number;
+  limit?: number;
+}
+
+export interface SightingPage {
+  rows: SightingRow[];
+  total: number;
+  /** Operator names with counts, useful for populating the airline dropdown. */
+  airlines: { name: string; count: number }[];
 }
 
 /** Definition of an achievement badge (server-side; sent to the UI). */

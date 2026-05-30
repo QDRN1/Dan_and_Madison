@@ -1,68 +1,68 @@
 import { useEffect, useState } from "react";
-import type { FlaggedSighting, SightingRow, Stats } from "@qdrn/shared";
+import type { FlaggedSighting, SightingScope, SightingSort, Stats } from "@qdrn/shared";
 import { api } from "../api";
 import { useRadar } from "../store";
+import { SightingsPopout, type PopoutKind } from "./SightingsPopout";
 
 export type DetailKind = "overview" | "in-view" | "today" | "farthest" | "all-time" | "notable";
 
-const TITLES: Record<DetailKind, string> = {
-  "overview": "Stats overview",
-  "in-view": "In view now",
-  "today": "Seen today",
-  "farthest": "Farthest today",
-  "all-time": "All-time unique",
-  "notable": "Notable sightings",
-};
+const SHEET_TITLES = {
+  overview: "Stats overview",
+  notable:  "Notable sightings",
+} as const;
 
-/** Slide-up sheet listing the rows behind whichever stat card was tapped. */
+/** Routes the right UI for each stat kind:
+ *   - "overview" / "notable" → small slide-up sheet
+ *   - "in-view" / "today" / "all-time" / "farthest" → full-screen filtered
+ *     popout (search, scope tabs, airline filter, sortable).
+ *  Drilling from the overview cards opens the popout, closing the sheet. */
 export function StatsDetail({ kind, onClose }: { kind: DetailKind; onClose: () => void }): JSX.Element {
-  const select = useRadar((s) => s.select);
-  const liveAircraft = useRadar((s) => s.aircraft);
   const [active, setActive] = useState<DetailKind>(kind);
-  const [rows, setRows] = useState<SightingRow[] | null>(null);
-  const [notable, setNotable] = useState<FlaggedSighting[] | null>(null);
+
+  // Drill from a sheet card into the full-screen popout. The sheet stays
+  // mounted underneath so closing the popout returns to the overview.
+  if (active === "in-view" || active === "today" || active === "all-time" || active === "farthest") {
+    const popoutKind: PopoutKind = active === "in-view" ? "in-view" : active === "farthest" ? "farthest" : "sightings";
+    const initScope: SightingScope | undefined =
+      active === "today"    ? "today" :
+      active === "all-time" ? "all"   :
+      active === "farthest" ? "today" :
+      undefined;
+    const initSort: SightingSort | undefined = active === "farthest" ? "farthest" : "recent";
+    const title =
+      active === "in-view"  ? "In view now" :
+      active === "today"    ? "Seen today" :
+      active === "all-time" ? "All-time unique" :
+                              "Farthest tracked";
+    return (
+      <SightingsPopout
+        kind={popoutKind}
+        initial={{ scope: initScope, sort: initSort, title }}
+        onClose={() => { setActive(kind === "overview" ? "overview" : kind); if (kind !== "overview") onClose(); }}
+      />
+    );
+  }
+
+  return <DetailSheet active={active} onPick={setActive} onClose={onClose} />;
+}
+
+function DetailSheet({ active, onPick, onClose }: { active: "overview" | "notable"; onPick: (k: DetailKind) => void; onClose: () => void }): JSX.Element {
+  const select = useRadar((s) => s.select);
   const [overview, setOverview] = useState<Stats | null>(null);
-  const [total, setTotal] = useState<number | undefined>();
+  const [notable, setNotable] = useState<FlaggedSighting[] | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    setRows(null); setNotable(null); setOverview(null); setTotal(undefined);
     const load = async () => {
       try {
         if (active === "overview") {
           const s = await api.stats();
-          if (!alive) return;
-          setOverview(s);
-        } else if (active === "in-view") {
-          const live: SightingRow[] = liveAircraft.map((a) => ({
-            hex: a.hex,
-            flight: a.flight,
-            typeCode: a.enrichment?.typeCode ?? null,
-            typeName: a.enrichment?.typeName ?? null,
-            operator: a.enrichment?.operator ?? a.enrichment?.operatorIcao ?? null,
-            lastSeen: Date.now(),
-            maxDistNm: a.distNm,
-          }));
-          setRows(live);
-          setTotal(live.length);
-        } else if (active === "today") {
-          const r = await api.statsToday(0, 200);
-          if (!alive) return;
-          setRows(r.rows); setTotal(r.total);
-        } else if (active === "all-time") {
-          const r = await api.statsAllTime(0, 200);
-          if (!alive) return;
-          setRows(r.rows); setTotal(r.total);
-        } else if (active === "farthest") {
-          const r = await api.statsFarthest("today", 50);
-          if (!alive) return;
-          setRows(r.rows); setTotal(r.total);
+          if (alive) setOverview(s);
         } else if (active === "notable") {
           const r = await api.statsNotable(100);
-          if (!alive) return;
-          setNotable(r.rows); setTotal(r.rows.length);
+          if (alive) setNotable(r.rows);
         }
       } finally {
         if (alive) setLoading(false);
@@ -70,41 +70,30 @@ export function StatsDetail({ kind, onClose }: { kind: DetailKind; onClose: () =
     };
     void load();
     return () => { alive = false; };
-  }, [active, liveAircraft]);
+  }, [active]);
 
-  const backable = active !== kind;
+  const title = SHEET_TITLES[active];
+  const count = active === "notable" ? notable?.length : undefined;
 
   return (
     <div className="detail-backdrop" onClick={onClose}>
       <div className="detail-sheet" onClick={(e) => e.stopPropagation()}>
         <div className="detail-handle" />
         <div className="detail-head">
-          {backable && (
-            <button className="iconbtn" onClick={() => setActive(kind)} aria-label="Back" style={{ marginRight: 4 }}>‹</button>
-          )}
-          <div className="detail-title">{TITLES[active]}{total != null && <span className="muted detail-count"> · {total}</span>}</div>
+          <div className="detail-title">
+            {title}{count != null && <span className="muted detail-count"> · {count}</span>}
+          </div>
           <button className="iconbtn" onClick={onClose} aria-label="Close">✕</button>
         </div>
         <div className="detail-body scroll">
           {loading && <div className="muted" style={{ padding: 16, textAlign: "center" }}>Loading…</div>}
 
-          {!loading && active === "overview" && overview && (
-            <Overview stats={overview} onPick={setActive} />
-          )}
+          {!loading && active === "overview" && overview && <Overview stats={overview} onPick={onPick} />}
 
-          {!loading && rows && rows.length === 0 && (
-            <div className="muted" style={{ padding: 16, textAlign: "center" }}>Nothing here yet.</div>
+          {!loading && active === "notable" && notable && notable.length === 0 && (
+            <div className="muted" style={{ padding: 16, textAlign: "center" }}>Nothing flagged yet.</div>
           )}
-          {!loading && rows && rows.map((r) => (
-            <div key={`${r.hex}-${r.lastSeen}`} className="detail-row" onClick={() => { if (active === "in-view") { select(r.hex); onClose(); } }}>
-              <div className="detail-cs">{r.flight?.trim() || r.hex.toUpperCase()}</div>
-              <div className="detail-sub">
-                {[r.typeName ?? r.typeCode, r.operator, r.maxDistNm != null ? `${Math.round(r.maxDistNm * 10) / 10} nm` : null]
-                  .filter(Boolean).join(" · ")}
-              </div>
-            </div>
-          ))}
-          {!loading && notable && notable.map((f, i) => (
+          {!loading && active === "notable" && notable && notable.map((f, i) => (
             <div key={i} className="detail-row" onClick={() => { select(f.hex); onClose(); }}>
               <div className="detail-cs">★ {f.flight?.trim() || f.hex.toUpperCase()}</div>
               <div className="detail-sub">{f.reason}{f.operator ? ` · ${f.operator}` : ""}</div>

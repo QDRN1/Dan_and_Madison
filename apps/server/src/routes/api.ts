@@ -57,7 +57,7 @@ import { getCoverage } from "../coverage.js";
 import { clearEnrichmentCache, enrich } from "../enrichment.js";
 import { applyFeedersInBackground, writeFeederEnv } from "../feeder.js";
 import { store } from "../poller.js";
-import { getStats, listAllTime, listFarthest, listNotable, listToday } from "../stats.js";
+import { getStats, listAllTime, listFarthest, listNotable, listSightings, listToday } from "../stats.js";
 
 function setupState(): SetupState {
   const keys = getApiKeys();
@@ -145,6 +145,26 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
     const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 100));
     return { rows: listNotable(limit) };
   });
+
+  // Filtered sightings popout — powers the full-screen tables in the UI.
+  app.get<{
+    Querystring: {
+      scope?: "today" | "week" | "month" | "all";
+      sort?: "recent" | "farthest" | "first";
+      q?: string;
+      airline?: string;
+      offset?: string;
+      limit?: string;
+    };
+  }>("/stats/sightings", async (req) => listSightings({
+    scope: req.query.scope,
+    sort: req.query.sort,
+    q: req.query.q,
+    airline: req.query.airline,
+    offset: req.query.offset != null ? Math.max(0, Number(req.query.offset) || 0) : undefined,
+    limit: req.query.limit != null ? Math.min(500, Math.max(1, Number(req.query.limit) || 100)) : undefined,
+  }));
+
   app.get("/achievements", async () => ({ achievements: listAchievements() }));
 
   // Radar-versary banner data: the first home WiFi name + when it was joined,

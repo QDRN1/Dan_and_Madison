@@ -74,6 +74,18 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_sightings_dist ON sightings(max_dist_nm DESC);
 `);
 
+// Lazy column adds — older DBs predate the route columns. ALTER TABLE ADD COLUMN
+// errors if the column already exists, so we probe pragma_table_info first.
+function ensureColumn(table: string, column: string, type: string): void {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (cols.some((c) => c.name === column)) return;
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+}
+ensureColumn("sightings", "origin_icao", "TEXT");
+ensureColumn("sightings", "dest_icao", "TEXT");
+ensureColumn("sightings", "route_source", "TEXT");
+db.exec(`CREATE INDEX IF NOT EXISTS idx_sightings_operator ON sightings(operator);`);
+
 const getStmt = db.prepare<[string]>("SELECT value FROM settings WHERE key = ?");
 const setStmt = db.prepare<[string, string]>(
   "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",

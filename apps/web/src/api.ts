@@ -1,4 +1,4 @@
-import type { AchievementProgress, AdminSettings, Aircraft, Connections, CoveragePoint, FlaggedSighting, LiveSnapshot, PublicConfig, SetupState, SightingRow, Stats, WifiNetwork, WifiScanResult } from "@qdrn/shared";
+import type { AchievementProgress, AdminSettings, Aircraft, Connections, CoveragePoint, FlaggedSighting, LiveSnapshot, PublicConfig, SetupState, SightingFilter, SightingPage, SightingRow, Stats, WifiNetwork, WifiScanResult } from "@qdrn/shared";
 
 // Vite injects the configured base path (e.g. "/md/"); strip the trailing slash.
 export const BASE = import.meta.env.BASE_URL.replace(/\/+$/, "");
@@ -30,6 +30,17 @@ export const api = {
   statsAllTime:  (offset = 0, limit = 100) => get<{ rows: SightingRow[]; total: number }>(`/stats/all-time?offset=${offset}&limit=${limit}`),
   statsFarthest: (scope: "today" | "all" = "today", limit = 50) => get<{ rows: SightingRow[]; total: number }>(`/stats/farthest?scope=${scope}&limit=${limit}`),
   statsNotable:  (limit = 100) => get<{ rows: FlaggedSighting[] }>(`/stats/notable?limit=${limit}`),
+  /** Filtered sightings — backs the full-screen popout tables. */
+  sightings: (f: SightingFilter) => {
+    const p = new URLSearchParams();
+    if (f.scope)   p.set("scope",   f.scope);
+    if (f.sort)    p.set("sort",    f.sort);
+    if (f.q)       p.set("q",       f.q);
+    if (f.airline) p.set("airline", f.airline);
+    if (f.offset != null) p.set("offset", String(f.offset));
+    if (f.limit  != null) p.set("limit",  String(f.limit));
+    return get<SightingPage>(`/stats/sightings?${p.toString()}`);
+  },
   achievements:  () => get<{ achievements: AchievementProgress[] }>("/achievements"),
   anniversary:   () => get<
     | { configured: false }

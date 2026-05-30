@@ -996,3 +996,123 @@
 @media (prefers-reduced-motion: reduce) {
   .anniv-banner { animation: none; }
 }
+
+/* ─── Full-screen sightings popout ─────────────────────────────────────── */
+.popout-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9;
+  background: rgba(0, 10, 26, 0.62);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  animation: popout-fade 0.18s ease-out;
+}
+@keyframes popout-fade { from { opacity: 0; } to { opacity: 1; } }
+.popout {
+  background: var(--bg);
+  color: var(--text);
+  width: 100%;
+  max-width: 980px;
+  margin: 24px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.popout-head {
+  display: flex;
+  align-items: center;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.popout-title {
+  flex: 1;
+  font-size: 18px;
+  font-weight: 800;
+}
+.popout-count { font-weight: 600; font-size: 14px; }
+.popout-filters {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.popout-scope-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.popout-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 8px;
+}
+.popout-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.popout-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  gap: 12px;
+}
+.popout-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.popout-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  text-align: left;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  z-index: 1;
+}
+.popout-table thead th.num { text-align: right; }
+.popout-table tbody td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.popout-table tbody td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.popout-table tbody td.ellipsis {
+  max-width: 1px; /* triggers ellipsis in flex grid layouts */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.popout-table tbody tr {
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+.popout-table tbody tr:hover { background: var(--hover); }
+
+@media (max-width: 640px) {
+  .popout { margin: 0; border-radius: 0; max-width: 100%; }
+  .popout-row { grid-template-columns: 1fr; }
+  /* On phones, hide non-essential columns so the table doesn't horizontally scroll. */
+  .popout-table thead th:nth-child(2),
+  .popout-table tbody td:nth-child(2),
+  .popout-table thead th:nth-child(6),
+  .popout-table tbody td:nth-child(6) {
+    display: none;
+  }
+}

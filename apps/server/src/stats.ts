@@ -1,5 +1,13 @@
 import { readFileSync } from "node:fs";
-import type { Aircraft, FlaggedSighting, SightingRow, Stats } from "@qdrn/shared";
+import type {
+  Aircraft,
+  FlaggedSighting,
+  SightingFilter,
+  SightingPage,
+  SightingRow,
+  SightingScope,
+  Stats,
+} from "@qdrn/shared";
 import { checkAll as checkAchievements } from "./achievements.js";
 import { TIMEZONE } from "./config.js";
 import { db } from "./db.js";
@@ -41,15 +49,22 @@ const flaggedToday = new Set<string>();
 let flaggedDay = today();
 
 const upsertSighting = db.prepare(
-  `INSERT INTO sightings (hex, day, flight, type_code, type_name, operator, first_seen, last_seen, max_dist_nm)
-   VALUES (@hex, @day, @flight, @type_code, @type_name, @operator, @ts, @ts, @dist)
+  `INSERT INTO sightings (hex, day, flight, type_code, type_name, operator,
+                          origin_icao, dest_icao, route_source,
+                          first_seen, last_seen, max_dist_nm)
+   VALUES (@hex, @day, @flight, @type_code, @type_name, @operator,
+           @origin_icao, @dest_icao, @route_source,
+           @ts, @ts, @dist)
    ON CONFLICT(hex, day) DO UPDATE SET
-     last_seen   = @ts,
-     flight      = COALESCE(@flight, sightings.flight),
-     type_code   = COALESCE(@type_code, sightings.type_code),
-     type_name   = COALESCE(@type_name, sightings.type_name),
-     operator    = COALESCE(@operator, sightings.operator),
-     max_dist_nm = MAX(sightings.max_dist_nm, @dist)`,
+     last_seen    = @ts,
+     flight       = COALESCE(@flight, sightings.flight),
+     type_code    = COALESCE(@type_code, sightings.type_code),
+     type_name    = COALESCE(@type_name, sightings.type_name),
+     operator     = COALESCE(@operator, sightings.operator),
+     origin_icao  = COALESCE(@origin_icao, sightings.origin_icao),
+     dest_icao    = COALESCE(@dest_icao, sightings.dest_icao),
+     route_source = COALESCE(@route_source, sightings.route_source),
+     max_dist_nm  = MAX(sightings.max_dist_nm, @dist)`,
 );
 
 const insertFlagged = db.prepare(
@@ -76,6 +91,9 @@ export function recordSighting(ac: Aircraft): void {
     const allTimeUniqueBefore = (countAllTimeStmt.get() as { n: number }).n;
     const wasSeenBefore = Boolean(seenAlreadyStmt.get(ac.hex));
 
+    const route = e?.route;
+    const originIcao = route?.origin?.icao ?? route?.origin?.iata ?? null;
+    const destIcao = route?.destination?.icao ?? route?.destination?.iata ?? null;
     upsertSighting.run({
       hex: ac.hex,
       day,
@@ -83,6 +101,9 @@ export function recordSighting(ac: Aircraft): void {
       type_code: e?.typeCode ?? null,
       type_name: e?.typeName ?? null,
       operator: e?.operator ?? e?.operatorIcao ?? null,
+      origin_icao: originIcao,
+      dest_icao: destIcao,
+      route_source: route?.source ?? null,
       ts: Date.now(),
       dist: ac.distNm ?? 0,
     } as any);
@@ -186,53 +207,102 @@ export function getStats(current: number): Stats {
 
 // ─── Popout queries (clickable stat cards) ───────────────────────────────────
 
-const todayListStmt = db.prepare(
-  `SELECT hex, flight, type_code AS typeCode, type_name AS typeName, operator,
-          first_seen AS firstSeen, last_seen AS lastSeen, max_dist_nm AS maxDistNm
-   FROM sightings WHERE day = ?
-   ORDER BY last_seen DESC LIMIT ? OFFSET ?`,
-);
-const allTimeListStmt = db.prepare(
-  `SELECT hex, MAX(last_seen) AS lastSeen, MAX(max_dist_nm) AS maxDistNm,
-          MAX(flight) AS flight, MAX(type_code) AS typeCode,
-          MAX(type_name) AS typeName, MAX(operator) AS operator
-   FROM sightings GROUP BY hex
-   ORDER BY lastSeen DESC LIMIT ? OFFSET ?`,
-);
-const farthestTodayStmt = db.prepare(
-  `SELECT hex, flight, type_code AS typeCode, type_name AS typeName, operator,
-          last_seen AS lastSeen, max_dist_nm AS maxDistNm
-   FROM sightings WHERE day = ? ORDER BY max_dist_nm DESC LIMIT ?`,
-);
-const farthestAllStmt = db.prepare(
-  `SELECT hex, MAX(flight) AS flight, MAX(type_code) AS typeCode,
-          MAX(type_name) AS typeName, MAX(operator) AS operator,
-          MAX(last_seen) AS lastSeen, MAX(max_dist_nm) AS maxDistNm
-   FROM sightings GROUP BY hex ORDER BY maxDistNm DESC LIMIT ?`,
-);
+const SIGHTING_COLS = `hex, flight, type_code AS typeCode, type_name AS typeName,
+  operator, origin_icao AS originIcao, dest_icao AS destIcao,
+  first_seen AS firstSeen, last_seen AS lastSeen, max_dist_nm AS maxDistNm`;
+
 const notableListStmt = db.prepare(
   `SELECT hex, flight, type_name AS typeName, operator, reason, at
    FROM flagged ORDER BY at DESC LIMIT ?`,
 );
 
-export interface SightingPage { rows: SightingRow[]; total: number; }
+/** Day-key (YYYY-MM-DD) for `n` days ago in the configured timezone. */
+function dayAgo(n: number): string {
+  return dayFmt.format(new Date(Date.now() - n * 86_400_000));
+}
 
+function scopeWhere(scope: SightingScope): { sql: string; params: unknown[] } {
+  switch (scope) {
+    case "today": return { sql: "day = ?",  params: [today()] };
+    case "week":  return { sql: "day >= ?", params: [dayAgo(6)] };
+    case "month": return { sql: "day >= ?", params: [dayAgo(29)] };
+    case "all":   return { sql: "1=1",      params: [] };
+  }
+}
+
+/** Filtered popout query — backs the table popouts. Aggregates by hex when the
+ *  scope is wider than a single day so each aircraft shows up once with its
+ *  best/latest values. */
+export function listSightings(filter: SightingFilter): SightingPage {
+  const scope: SightingScope = filter.scope ?? "today";
+  const sort = filter.sort ?? (scope === "today" ? "recent" : "recent");
+  const limit = Math.min(500, Math.max(1, filter.limit ?? 100));
+  const offset = Math.max(0, filter.offset ?? 0);
+
+  const { sql: scopeSql, params: scopeParams } = scopeWhere(scope);
+  const whereParts: string[] = [scopeSql];
+  const params: unknown[] = [...scopeParams];
+
+  if (filter.airline && filter.airline.trim()) {
+    whereParts.push("operator = ?");
+    params.push(filter.airline.trim());
+  }
+  if (filter.q && filter.q.trim()) {
+    const like = `%${filter.q.trim().toLowerCase()}%`;
+    whereParts.push("(LOWER(hex) LIKE ? OR LOWER(flight) LIKE ? OR LOWER(operator) LIKE ? OR LOWER(type_code) LIKE ? OR LOWER(type_name) LIKE ? OR LOWER(origin_icao) LIKE ? OR LOWER(dest_icao) LIKE ?)");
+    params.push(like, like, like, like, like, like, like);
+  }
+  const where = whereParts.join(" AND ");
+
+  const orderBy = sort === "farthest" ? "maxDistNm DESC"
+    : sort === "first"               ? "firstSeen ASC"
+    :                                   "lastSeen DESC";
+
+  // For multi-day scopes, collapse to one row per hex (latest values, best dist).
+  const aggregate = scope !== "today";
+  const rowsSql = aggregate
+    ? `SELECT hex,
+              MAX(flight) AS flight, MAX(type_code) AS typeCode, MAX(type_name) AS typeName,
+              MAX(operator) AS operator, MAX(origin_icao) AS originIcao, MAX(dest_icao) AS destIcao,
+              MIN(first_seen) AS firstSeen, MAX(last_seen) AS lastSeen,
+              MAX(max_dist_nm) AS maxDistNm
+       FROM sightings WHERE ${where}
+       GROUP BY hex
+       ORDER BY ${orderBy}
+       LIMIT ? OFFSET ?`
+    : `SELECT ${SIGHTING_COLS}
+       FROM sightings WHERE ${where}
+       ORDER BY ${orderBy}
+       LIMIT ? OFFSET ?`;
+
+  const rows = db.prepare(rowsSql).all(...params, limit, offset) as SightingRow[];
+
+  const totalSql = aggregate
+    ? `SELECT COUNT(DISTINCT hex) n FROM sightings WHERE ${where}`
+    : `SELECT COUNT(*) n FROM sightings WHERE ${where}`;
+  const total = (db.prepare(totalSql).get(...params) as { n: number }).n;
+
+  // Airline facet — top 30 by count within the same scope (no q/airline filter
+  // applied so the dropdown shows the full set, not just what's visible).
+  const airlines = db.prepare(
+    `SELECT operator AS name, COUNT(DISTINCT hex) AS count
+     FROM sightings WHERE ${scopeSql} AND operator IS NOT NULL AND operator != ''
+     GROUP BY operator ORDER BY count DESC LIMIT 30`,
+  ).all(...scopeParams) as { name: string; count: number }[];
+
+  return { rows, total, airlines };
+}
+
+/** Back-compat wrappers — used by the existing /stats/today, /stats/all-time,
+ *  /stats/farthest endpoints. */
 export function listToday(offset = 0, limit = 50): SightingPage {
-  const day = today();
-  const total = (db.prepare("SELECT COUNT(*) n FROM sightings WHERE day = ?").get(day) as { n: number }).n;
-  return { rows: todayListStmt.all(day, limit, offset) as SightingRow[], total };
+  return listSightings({ scope: "today", sort: "recent", offset, limit });
 }
-
 export function listAllTime(offset = 0, limit = 50): SightingPage {
-  const total = (db.prepare("SELECT COUNT(DISTINCT hex) n FROM sightings").get() as { n: number }).n;
-  return { rows: allTimeListStmt.all(limit, offset) as SightingRow[], total };
+  return listSightings({ scope: "all", sort: "recent", offset, limit });
 }
-
 export function listFarthest(scope: "today" | "all" = "today", limit = 50): SightingPage {
-  const rows = scope === "today"
-    ? farthestTodayStmt.all(today(), limit) as SightingRow[]
-    : farthestAllStmt.all(limit) as SightingRow[];
-  return { rows, total: rows.length };
+  return listSightings({ scope, sort: "farthest", offset: 0, limit });
 }
 
 export function listNotable(limit = 100): FlaggedSighting[] {
