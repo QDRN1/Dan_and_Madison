@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { AdminSettings, ConnStatus, Connections, GatewayInfo, WifiNetwork, WifiScanResult } from "@qdrn/shared";
-import { BASE, api, geocodeCity, type GeoResult } from "../api";
-import { useRadar } from "../store";
+import { BASE, api, cityCenter, geocodeCity, type GeoResult } from "../api";
+import { useRadar, type IconTheme } from "../store";
 
 const PIN_KEY = "qdrn-pin";
 
@@ -153,6 +153,9 @@ export function Settings(): JSX.Element {
         ))}
       </div>
 
+      {/* Map plane icon theme (client-only easter egg) */}
+      <IconThemeSection />
+
       {/* Saved WiFi networks */}
       <WifiSection pin={pin} />
 
@@ -205,7 +208,7 @@ function LocationPill({
       {expanded && (
         <div className="set-pill-body">
           <div style={{ display: "flex", gap: 8 }}>
-            <input className="input" placeholder="Search a city…" value={q}
+            <input className="input" placeholder="Address or city (we center on the nearest town)" value={q}
               onChange={(e) => setQ(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && q.trim().length >= 2 && geocodeCity(q.trim()).then(setResults)} />
             <button className="btn" onClick={() => q.trim().length >= 2 && geocodeCity(q.trim()).then(setResults)}>Search</button>
@@ -213,8 +216,10 @@ function LocationPill({
           {results.map((r) => (
             <button key={`${r.lat},${r.lon}`} className="btn set-result"
               onClick={async () => {
-                const lat = Math.round(r.lat * 100) / 100;
-                const lon = Math.round(r.lon * 100) / 100;
+                // Try to snap to city center; fall back to the address coords.
+                const center = r.city ? await cityCenter(r.city, r.state) : null;
+                const lat = Math.round((center?.lat ?? r.lat) * 100) / 100;
+                const lon = Math.round((center?.lon ?? r.lon) * 100) / 100;
                 await api.saveLocation(pin, r.label, lat, lon, r.county);
                 onSaved();
               }}>
@@ -281,41 +286,53 @@ function GatewaySection({
   const [url, setUrl] = useState(gateway.url);
   const [key, setKey] = useState(gateway.key);
   const [saved, setSaved] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const configured = Boolean(gateway.url && gateway.key);
   const st = GW_STATUS[status ?? (configured ? "unknown" : "unset")];
   const pct = info?.limit && info.limit > 0 && info.used != null ? Math.min(100, Math.round((info.used / info.limit) * 100)) : null;
   return (
     <div className="set-card">
-      <div className="label" style={{ marginTop: 0, display: "flex", alignItems: "center", gap: 8 }}>
-        Shared API gateway
-        <span className={`set-pill ${st.cls}`} style={{ width: "auto", padding: "3px 10px", gap: 7 }}>
+      <button
+        className="set-collapse-head"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+      >
+        <span style={{ flex: 1, textAlign: "left", fontWeight: 700, fontSize: 13, letterSpacing: 0.3, textTransform: "uppercase", color: "var(--muted)" }}>
+          Shared API gateway
+        </span>
+        <span className={`set-pill ${st.cls}`} style={{ width: "auto", padding: "3px 10px", gap: 7, marginRight: 6 }}>
           <span className="dot" /> {st.label}
         </span>
-      </div>
-      <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
-        Route paid lookups through your gateway (ops.qdrn.io) instead of a local key. Leave blank to use a local key.
-      </p>
-
-      {configured && info && (info.used != null || info.limit != null) && (
-        <>
-          <div className="muted" style={{ fontSize: 12 }}>
-            {info.used ?? "?"}{info.limit ? ` / ${info.limit}` : ""} used
-            {info.remaining != null ? ` · ${info.remaining} left` : ""}
-            {info.resets ? ` · resets ${new Date(info.resets).toLocaleDateString()}` : info.resets === null ? " · no reset" : ""}
-          </div>
-          {pct != null && (
-            <div style={{ height: 6, margin: "8px 0", borderRadius: 3, background: "rgba(128,128,128,0.22)", overflow: "hidden" }}>
-              <div style={{ height: "100%", width: `${pct}%`, borderRadius: 3, background: status === "blocked" ? "var(--danger)" : "var(--accent)" }} />
-            </div>
-          )}
-        </>
-      )}
-
-      <input className="input" style={{ marginBottom: 8 }} placeholder="https://api.qdrn.io" value={url} onChange={(e) => { setUrl(e.target.value); setSaved(false); }} />
-      <input className="input" placeholder="Device key" value={key} onChange={(e) => { setKey(e.target.value); setSaved(false); }} />
-      <button className="btn btn-primary" style={{ marginTop: 8 }} onClick={async () => { await api.saveGateway(pin, url.trim(), key.trim()); setSaved(true); onSaved(); }}>
-        {saved ? "Saved ✓" : "Save gateway"}
+        <span className="set-collapse-chev" style={{ transform: expanded ? "rotate(90deg)" : "none" }}>›</span>
       </button>
+      {expanded && (
+        <div style={{ marginTop: 10 }}>
+          <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
+            Route paid lookups through your gateway (ops.qdrn.io) instead of a local key. Leave blank to use a local key.
+          </p>
+
+          {configured && info && (info.used != null || info.limit != null) && (
+            <>
+              <div className="muted" style={{ fontSize: 12 }}>
+                {info.used ?? "?"}{info.limit ? ` / ${info.limit}` : ""} used
+                {info.remaining != null ? ` · ${info.remaining} left` : ""}
+                {info.resets ? ` · resets ${new Date(info.resets).toLocaleDateString()}` : info.resets === null ? " · no reset" : ""}
+              </div>
+              {pct != null && (
+                <div style={{ height: 6, margin: "8px 0", borderRadius: 3, background: "rgba(128,128,128,0.22)", overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${pct}%`, borderRadius: 3, background: status === "blocked" ? "var(--danger)" : "var(--accent)" }} />
+                </div>
+              )}
+            </>
+          )}
+
+          <input className="input" style={{ marginBottom: 8 }} placeholder="https://api.qdrn.io" value={url} onChange={(e) => { setUrl(e.target.value); setSaved(false); }} />
+          <input className="input" placeholder="Device key" value={key} onChange={(e) => { setKey(e.target.value); setSaved(false); }} />
+          <button className="btn btn-primary" style={{ marginTop: 8 }} onClick={async () => { await api.saveGateway(pin, url.trim(), key.trim()); setSaved(true); onSaved(); }}>
+            {saved ? "Saved ✓" : "Save gateway"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -337,12 +354,59 @@ function SignalBars({ signal }: { signal?: number }): JSX.Element {
   );
 }
 
+const ICON_CHOICES: { id: IconTheme; emoji: string; label: string; sub: string }[] = [
+  { id: "plane", emoji: "✈️", label: "Classic", sub: "The airliner you know." },
+  { id: "paw",   emoji: "🐾", label: "Paw prints", sub: "For Madison." },
+  { id: "heart", emoji: "💛", label: "Hearts", sub: "Love is in the air." },
+  { id: "ufo",   emoji: "🛸", label: "UFOs", sub: "It's classified." },
+];
+
+function IconThemeSection(): JSX.Element {
+  const iconTheme = useRadar((s) => s.iconTheme);
+  const setIconTheme = useRadar((s) => s.setIconTheme);
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="set-card">
+      <button
+        className="set-collapse-head"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+      >
+        <span style={{ flex: 1, textAlign: "left", fontWeight: 700, fontSize: 13, letterSpacing: 0.3, textTransform: "uppercase", color: "var(--muted)" }}>
+          Map plane icon
+        </span>
+        <span style={{ marginRight: 6, fontSize: 18 }}>
+          {ICON_CHOICES.find((c) => c.id === iconTheme)?.emoji ?? "✈️"}
+        </span>
+        <span className="set-collapse-chev" style={{ transform: expanded ? "rotate(90deg)" : "none" }}>›</span>
+      </button>
+      {expanded && (
+        <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          {ICON_CHOICES.map((c) => (
+            <button
+              key={c.id}
+              className={`btn icon-choice${iconTheme === c.id ? " active" : ""}`}
+              onClick={() => setIconTheme(c.id)}
+              type="button"
+            >
+              <span style={{ fontSize: 22 }}>{c.emoji}</span>
+              <span style={{ fontWeight: 700, fontSize: 13 }}>{c.label}</span>
+              <span className="muted" style={{ fontSize: 11 }}>{c.sub}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PinSection({ currentPin, onChanged }: { currentPin: string; onChanged: (newPin: string) => void }): JSX.Element {
   const [cur, setCur] = useState("");
   const [nxt, setNxt] = useState("");
   const [conf, setConf] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const [expanded, setExpanded] = useState(false);
 
   const digits = (s: string) => s.replace(/\D/g, "").slice(0, 6);
 
@@ -383,22 +447,35 @@ function PinSection({ currentPin, onChanged }: { currentPin: string; onChanged: 
 
   return (
     <div className="set-card">
-      <div className="label" style={{ marginTop: 0 }}>Change PIN</div>
-      <input className="input" inputMode="numeric" type="password" placeholder="Current PIN (or owner code)"
-             value={cur} onChange={(e) => { setCur(digits(e.target.value)); setMsg(""); }} />
-      <input className="input" inputMode="numeric" type="password" placeholder="New PIN (4–6 digits)" style={{ marginTop: 8 }}
-             value={nxt} onChange={(e) => { setNxt(digits(e.target.value)); setMsg(""); }} />
-      <input className="input" inputMode="numeric" type="password" placeholder="Confirm new PIN" style={{ marginTop: 8 }}
-             value={conf} onChange={(e) => { setConf(digits(e.target.value)); setMsg(""); }} />
-      <button className="btn btn-primary" style={{ marginTop: 8 }}
-              disabled={busy || !cur || !nxt || !conf} onClick={() => void change()}>
-        {busy ? "Saving…" : "Change PIN"}
+      <button
+        className="set-collapse-head"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+      >
+        <span style={{ flex: 1, textAlign: "left", fontWeight: 700, fontSize: 13, letterSpacing: 0.3, textTransform: "uppercase", color: "var(--muted)" }}>
+          Change PIN
+        </span>
+        <span className="set-collapse-chev" style={{ transform: expanded ? "rotate(90deg)" : "none" }}>›</span>
       </button>
-      <button className="btn" style={{ marginTop: 8, background: "transparent", borderStyle: "dashed", width: "100%" }}
-              disabled={busy} onClick={() => void resetToDefault()}>
-        Forgot PIN? Reset to default
-      </button>
-      {msg && <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>{msg}</div>}
+      {expanded && (
+        <div style={{ marginTop: 10 }}>
+          <input className="input" inputMode="numeric" type="password" placeholder="Current PIN (or owner code)"
+                 value={cur} onChange={(e) => { setCur(digits(e.target.value)); setMsg(""); }} />
+          <input className="input" inputMode="numeric" type="password" placeholder="New PIN (4–6 digits)" style={{ marginTop: 8 }}
+                 value={nxt} onChange={(e) => { setNxt(digits(e.target.value)); setMsg(""); }} />
+          <input className="input" inputMode="numeric" type="password" placeholder="Confirm new PIN" style={{ marginTop: 8 }}
+                 value={conf} onChange={(e) => { setConf(digits(e.target.value)); setMsg(""); }} />
+          <button className="btn btn-primary" style={{ marginTop: 8 }}
+                  disabled={busy || !cur || !nxt || !conf} onClick={() => void change()}>
+            {busy ? "Saving…" : "Change PIN"}
+          </button>
+          <button className="btn" style={{ marginTop: 8, background: "transparent", borderStyle: "dashed", width: "100%" }}
+                  disabled={busy} onClick={() => void resetToDefault()}>
+            Forgot PIN? Reset to default
+          </button>
+          {msg && <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>{msg}</div>}
+        </div>
+      )}
     </div>
   );
 }

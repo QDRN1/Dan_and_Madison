@@ -3,10 +3,33 @@ import maplibregl, { type GeoJSONSource, type Map as MlMap } from "maplibre-gl";
 import type { FeatureCollection } from "geojson";
 import type { CoveragePoint } from "@qdrn/shared";
 import { api } from "../api";
-import { useRadar, type Theme } from "../store";
+import { useRadar, type IconTheme, type Theme } from "../store";
 import { altColor, altFeet } from "../format";
 
-function makePlaneImage(): { data: Uint8ClampedArray; width: number; height: number } {
+/** SVG paths for each plane-icon theme — all drawn in a 32x32 viewBox. They
+ *  render as SDF so altitude color tints still apply. */
+const ICON_PATHS: Record<IconTheme, string> = {
+  // Classic airliner top-view.
+  plane:
+    "M16 1 C15 1 14 2 14 4 L14 11 L3 18 L3 21 L14 17 L14 25 L10 28 L10 30 L16 28 L22 30 L22 28 L18 25 L18 17 L29 21 L29 18 L18 11 L18 4 C18 2 17 1 16 1 Z",
+  // Dog paw print (Madison's love).
+  paw:
+    "M16 16 C12 16 9 19 9 23 C9 26 12 29 16 29 C20 29 23 26 23 23 C23 19 20 16 16 16 Z " +
+    "M7 13 C5 13 4 11 4 9 C4 7 5 5 7 5 C9 5 10 7 10 9 C10 11 9 13 7 13 Z " +
+    "M25 13 C23 13 22 11 22 9 C22 7 23 5 25 5 C27 5 28 7 28 9 C28 11 27 13 25 13 Z " +
+    "M12 9 C10 9 9 7 9 5 C9 3 10 1 12 1 C14 1 15 3 15 5 C15 7 14 9 12 9 Z " +
+    "M20 9 C18 9 17 7 17 5 C17 3 18 1 20 1 C22 1 23 3 23 5 C23 7 22 9 20 9 Z",
+  // Heart (the Hobbit House dwellers).
+  heart:
+    "M16 28 C16 28 4 20 4 11 C4 6 8 3 12 3 C14 3 15 4 16 6 C17 4 18 3 20 3 C24 3 28 6 28 11 C28 20 16 28 16 28 Z",
+  // UFO — saucer with dome on top.
+  ufo:
+    "M16 6 C19 6 22 8 22 12 L23 13 L26 14 L28 16 L28 18 L4 18 L4 16 L6 14 L9 13 L10 12 C10 8 13 6 16 6 Z " +
+    "M11 19 C12 21 14 22 16 22 C18 22 20 21 21 19 Z " +
+    "M10 22 L9 25 M22 22 L23 25 M16 22 L16 26",
+};
+
+function makePlaneImage(kind: IconTheme = "plane"): { data: Uint8ClampedArray; width: number; height: number } {
   const vb = 32;
   const scale = 4;
   const W = vb * scale;
@@ -16,11 +39,14 @@ function makePlaneImage(): { data: Uint8ClampedArray; width: number; height: num
   const ctx = canvas.getContext("2d")!;
   ctx.scale(scale, scale);
   ctx.fillStyle = "#ffffff";
-  // Top-view airliner silhouette, nose pointing up (north).
-  const p = new Path2D(
-    "M16 1 C15 1 14 2 14 4 L14 11 L3 18 L3 21 L14 17 L14 25 L10 28 L10 30 L16 28 L22 30 L22 28 L18 25 L18 17 L29 21 L29 18 L18 11 L18 4 C18 2 17 1 16 1 Z",
-  );
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = 1.5;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  const p = new Path2D(ICON_PATHS[kind]);
   ctx.fill(p);
+  // UFO has a couple of stroked beams — strokes contribute to SDF too.
+  if (kind === "ufo") ctx.stroke(p);
   return { data: ctx.getImageData(0, 0, W, W).data, width: W, height: W };
 }
 
@@ -78,10 +104,11 @@ export function MapView(): JSX.Element {
   const selectedTrail = useRadar((s) => s.selectedTrail);
   const select = useRadar((s) => s.select);
   const theme = useRadar((s) => s.theme);
+  const iconTheme = useRadar((s) => s.iconTheme);
 
   // Adds our sources + layers on top of whatever basemap style is loaded.
   // Idempotent: after a style switch the custom sources are gone, so we re-add.
-  function installLayers(map: MlMap, t: Theme): void {
+  function installLayers(map: MlMap, t: Theme, icon: IconTheme): void {
     if (!config) return;
     const { receiver } = config;
     const col = mapColors(t);
@@ -90,7 +117,7 @@ export function MapView(): JSX.Element {
     // a stale hasImage() check can leave the symbol layer with no texture (planes
     // vanish after a dark/light switch). Recreate it fresh to be safe.
     if (map.hasImage("plane")) map.removeImage("plane");
-    map.addImage("plane", makePlaneImage(), { sdf: true, pixelRatio: 4 });
+    map.addImage("plane", makePlaneImage(icon), { sdf: true, pixelRatio: 4 });
 
     // Surface airport runways/taxiways earlier (the basemap hides them until you
     // zoom way in) so airfields are recognizable from a wider view.
@@ -352,7 +379,8 @@ export function MapView(): JSX.Element {
     mapRef.current = map;
 
     map.on("load", () => {
-      installLayers(map, useRadar.getState().theme);
+      const st = useRadar.getState();
+      installLayers(map, st.theme, st.iconTheme);
       attachHandlers(map);
       readyRef.current = true;
       updateSource();
@@ -381,7 +409,7 @@ export function MapView(): JSX.Element {
     readyRef.current = false;
     map.setStyle(config.mapStyle[theme]);
     const reinstall = () => {
-      installLayers(map, theme);
+      installLayers(map, theme, useRadar.getState().iconTheme);
       readyRef.current = true;
       updateSource();
       updateTrail();
@@ -390,6 +418,18 @@ export function MapView(): JSX.Element {
     map.once("idle", reinstall);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [theme, config]);
+
+  // Swap the plane glyph in-place when the user picks a new icon theme. No
+  // basemap reload — just replace the SDF image and the symbol layer repaints.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !readyRef.current) return;
+    if (map.hasImage("plane")) map.removeImage("plane");
+    map.addImage("plane", makePlaneImage(iconTheme), { sdf: true, pixelRatio: 4 });
+    // Trigger a repaint of the symbol layer.
+    updateSource();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [iconTheme]);
 
   // Push live aircraft / selection to the map.
   useEffect(() => {

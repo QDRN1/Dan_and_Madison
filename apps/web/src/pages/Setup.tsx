@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import "./setup.css";
-import { BASE, api, geocodeCity, type GeoResult } from "../api";
+import { BASE, api, cityCenter, geocodeCity, type GeoResult } from "../api";
 import { useRadar } from "../store";
 import { ThemeToggle } from "../components/ThemeToggle";
 
@@ -209,9 +209,11 @@ function LocationStep({ pin, onNext, onBack }: { pin: string; onNext: () => void
   async function save(): Promise<void> {
     if (!chosen) return;
     setSaving(true);
-    // City-level only: round to ~city precision so the exact home isn't stored.
-    const lat = Math.round(chosen.lat * 100) / 100;
-    const lon = Math.round(chosen.lon * 100) / 100;
+    // Snap to the nearest city's center so a street address still privacy-blurs
+    // to the town. Fall back to the address coords if city lookup misses.
+    const center = chosen.city ? await cityCenter(chosen.city, chosen.state) : null;
+    const lat = Math.round((center?.lat ?? chosen.lat) * 100) / 100;
+    const lon = Math.round((center?.lon ?? chosen.lon) * 100) / 100;
     await api.saveLocation(pin, chosen.label, lat, lon, chosen.county).catch(() => undefined);
     setSaving(false);
     onNext();
@@ -220,13 +222,14 @@ function LocationStep({ pin, onNext, onBack }: { pin: string; onNext: () => void
   return (
     <div>
       <CaptainQ>
-        Where am I stationed? Type your <b>town or city</b> and pick it from the list. I only
-        keep it roughly — never your exact address — just enough to center the map. 🗺️
+        Where am I stationed? Type your <b>address, town, or city</b> and pick it from the list.
+        Whatever you enter, I snap to the nearest town's center — never your exact doorstep — just
+        enough to center the map. 🗺️
       </CaptainQ>
       <h2 className="step-title">Set your location</h2>
-      <label className="label">Town / city</label>
+      <label className="label">Address or city</label>
       <form onSubmit={(e) => { e.preventDefault(); void search(); }} style={{ display: "flex", gap: 8 }}>
-        <input className="input" placeholder="e.g. Annapolis, MD" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input className="input" placeholder="e.g. 123 Main St, Annapolis, MD" value={q} onChange={(e) => setQ(e.target.value)} />
         <button type="submit" className="btn">Search</button>
       </form>
       {results.length > 0 && (

@@ -64,3 +64,16 @@ export function fmtTrack(a: Aircraft): string {
 export function label(a: Aircraft): string {
   return a.flight?.trim() || a.enrichment?.registration || a.hex.toUpperCase();
 }
+
+/** Frontier Airlines paints every tail with a different animal mascot. Pick
+ *  one deterministically from the ICAO hex so each "Flo the Flamingo" gets
+ *  the same emoji every time. Returns null for non-Frontier callsigns. */
+const FRONTIER_ANIMALS = ["🦊", "🦌", "🦅", "🦫", "🐻", "🦉", "🐺", "🦝", "🐿️", "🦃", "🦆", "🦢", "🦩", "🦡", "🦔", "🐇", "🐿️", "🦬", "🦓", "🐎"];
+export function frontierAnimal(a: Aircraft): string | null {
+  const cs = a.flight?.trim().toUpperCase() ?? "";
+  if (!cs.startsWith("FFT")) return null;
+  // FNV-ish hash over the hex (stable, no deps).
+  let h = 2166136261;
+  for (const ch of a.hex) h = (h ^ ch.charCodeAt(0)) * 16777619 >>> 0;
+  return FRONTIER_ANIMALS[h % FRONTIER_ANIMALS.length] ?? "🐾";
+}

@@ -153,6 +153,11 @@ export interface GeoResult {
   /** "City, ST" friendly label. */
   label: string;
   county?: string;
+  /** Resolved city/town for the address (used for city-center centering). */
+  city?: string;
+  /** Full state name from Nominatim (used to look up city center). */
+  state?: string;
+  /** Coords of the matched result (may be a street address — see cityCenter). */
   lat: number;
   lon: number;
 }
@@ -168,14 +173,33 @@ export async function geocodeCity(q: string): Promise<GeoResult[]> {
   }>;
   return rows.map((r) => {
     const a = r.address ?? {};
-    const place = a.city || a.town || a.village || a.hamlet || a.municipality || a.county || r.display_name.split(",")[0]!;
+    const city = a.city || a.town || a.village || a.hamlet || a.municipality || a.county || r.display_name.split(",")[0]!;
     const st = a.state ? STATE_ABBR[a.state] ?? a.state : "";
     return {
       name: r.display_name,
-      label: st ? `${place}, ${st}` : place,
+      label: st ? `${city}, ${st}` : city,
       county: a.county,
+      city,
+      state: a.state,
       lat: Number(r.lat),
       lon: Number(r.lon),
     };
   });
+}
+
+/** Resolve the geometric center of a city — used so a full address still centers
+ *  the map on the nearest town rather than the user's doorstep. Falls back to
+ *  the original coords if the city lookup fails. */
+export async function cityCenter(city: string, state?: string): Promise<{ lat: number; lon: number } | null> {
+  const q = state ? `${city}, ${state}` : city;
+  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&featuretype=city&q=${encodeURIComponent(q)}`;
+  try {
+    const res = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!res.ok) return null;
+    const rows = (await res.json()) as Array<{ lat: string; lon: string }>;
+    if (!rows.length) return null;
+    return { lat: Number(rows[0]!.lat), lon: Number(rows[0]!.lon) };
+  } catch {
+    return null;
+  }
 }

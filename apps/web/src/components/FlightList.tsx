@@ -1,5 +1,5 @@
 import { useRadar } from "../store";
-import { altColor, altFeet, fmtAlt, label } from "../format";
+import { altColor, altFeet, fmtAlt, frontierAnimal, label } from "../format";
 
 export function FlightList(): JSX.Element {
   const aircraft = useRadar((s) => s.aircraft);
@@ -15,6 +15,7 @@ export function FlightList(): JSX.Element {
       {sorted.length === 0 && <div className="muted" style={{ padding: 12 }}>No aircraft in range yet…</div>}
       {sorted.map((a) => {
         const e = a.enrichment;
+        const animal = frontierAnimal(a);
         return (
           <div
             key={a.hex}
@@ -32,7 +33,9 @@ export function FlightList(): JSX.Element {
             />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div className="cs">
-                {label(a)} {a.flagged && <span className="pill warn" style={{ marginLeft: 6 }}>★</span>}
+                {label(a)}
+                {animal && <span title="Frontier — every tail is an animal" style={{ marginLeft: 6 }}>{animal}</span>}
+                {a.flagged && <span className="pill warn" style={{ marginLeft: 6 }}>★</span>}
               </div>
               <div className="sub" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {[e?.typeCode, e?.operator].filter(Boolean).join(" · ") || a.hex.toUpperCase()}

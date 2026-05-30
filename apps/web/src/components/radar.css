@@ -490,6 +490,28 @@
 .set-pill-body {
   padding: 10px 2px 4px;
 }
+.set-collapse-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  text-align: left;
+}
+.set-collapse-head:hover .set-collapse-chev { color: var(--accent); }
+.set-collapse-chev {
+  font-size: 20px;
+  line-height: 1;
+  color: var(--muted);
+  transition: transform 0.15s ease, color 0.15s ease;
+  display: inline-block;
+  flex: 0 0 auto;
+  font-weight: 700;
+}
 .set-result {
   display: block;
   width: 100%;
@@ -766,19 +788,21 @@
   bottom: calc(8px + env(safe-area-inset-bottom));
   z-index: 4;
   display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 9px 14px;
-  background: rgba(0, 21, 51, 0.78);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  color: var(--text);
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 16px;
+  background: rgba(0, 21, 51, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 14px;
+  /* Banner BG is always dark, so hardcode a light text color regardless of theme. */
+  color: #f1f5fb;
   font: inherit;
   font-size: 12px;
+  line-height: 1.45;
   text-align: left;
   cursor: pointer;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   max-width: 720px;
   margin: 0 auto;
   transition: transform 0.15s ease, border-color 0.15s ease;
@@ -789,13 +813,150 @@
 .fact-pip {
   font-size: 14px;
   flex: 0 0 auto;
+  margin-top: 1px;
 }
 .fact-text {
   flex: 1;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 @media (max-width: 520px) {
-  .fact-banner { font-size: 11px; padding: 7px 12px; }
+  .fact-banner { font-size: 11px; padding: 8px 12px; border-radius: 12px; }
+  .fact-text { -webkit-line-clamp: 4; }
+}
+
+/* ─── Seasonal overlays ─────────────────────────────────────────────────── */
+
+/* Golden hour: warm sunrise/sunset tint at the screen edges. Lives above the
+ * map but below the chrome (drawer/topbar/banner all sit on z:3-5). */
+.golden-tint {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  mix-blend-mode: soft-light;
+  opacity: 0.85;
+  background:
+    radial-gradient(ellipse at center, transparent 55%, rgba(255, 140, 60, 0.45) 100%),
+    linear-gradient(180deg, rgba(255, 175, 90, 0.18) 0%, transparent 35%, transparent 65%, rgba(255, 110, 70, 0.28) 100%);
+  animation: golden-fade 1.2s ease-out;
+}
+.golden-tint.sunrise {
+  background:
+    radial-gradient(ellipse at center, transparent 55%, rgba(255, 175, 95, 0.4) 100%),
+    linear-gradient(180deg, rgba(255, 195, 130, 0.22) 0%, transparent 40%, transparent 70%, rgba(255, 150, 100, 0.22) 100%);
+}
+@keyframes golden-fade {
+  from { opacity: 0; }
+  to   { opacity: 0.85; }
+}
+
+/* Halloween dusk: subtle purple vignette. Same z-index strategy as golden. */
+.halloween-tint {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+  background: radial-gradient(ellipse at center, transparent 50%, rgba(60, 20, 80, 0.55) 100%);
+}
+
+/* New Year sparks raining from the top. Each .spark is a small bright dot
+ * animated to drift downward and fade — looks like firework embers. */
+.fireworks {
+  position: absolute;
+  inset: 0;
+  z-index: 6; /* above drawer/topbar so it always reads as "celebration" */
+  pointer-events: none;
+  overflow: hidden;
+}
+.spark {
+  position: absolute;
+  top: -10px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  opacity: 0;
+  animation-name: spark-fall;
+  animation-iteration-count: infinite;
+  animation-timing-function: linear;
+}
+@keyframes spark-fall {
+  0%   { transform: translateY(0)    scale(0.6); opacity: 0; }
+  10%  { opacity: 1; }
+  85%  { opacity: 1; }
+  100% { transform: translateY(110vh) scale(0.3); opacity: 0; }
+}
+
+/* Respect reduced-motion: kill the animation but keep the colors. */
+@media (prefers-reduced-motion: reduce) {
+  .spark { animation: none; opacity: 0.65; top: auto; bottom: 10vh; }
+  .golden-tint { animation: none; }
+}
+
+/* ─── Toast notifications ───────────────────────────────────────────────── */
+.toast-stack {
+  position: absolute;
+  top: calc(58px + env(safe-area-inset-top));
+  right: 12px;
+  z-index: 7;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 320px;
+  width: calc(100vw - 24px);
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(0, 21, 51, 0.92);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  color: #f1f5fb;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  animation: toast-in 0.28s ease-out both;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.toast:hover { transform: translateX(-2px); }
+.toast-icon { font-size: 22px; flex: 0 0 auto; line-height: 1; }
+.toast-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.toast-title { font-weight: 800; font-size: 13px; }
+.toast-sub { font-size: 12px; opacity: 0.85; overflow: hidden; text-overflow: ellipsis; }
+@keyframes toast-in {
+  from { transform: translateX(20px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast { animation: none; }
+  .toast:hover { transform: none; }
+}
+
+/* Icon-theme picker tiles in Settings. */
+.icon-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 8px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: transparent;
+  cursor: pointer;
+  text-align: center;
+}
+.icon-choice:hover { border-color: var(--accent); }
+.icon-choice.active {
+  border-color: var(--accent);
+  background: rgba(163, 201, 64, 0.08);
 }

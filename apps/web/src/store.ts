@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type { Aircraft, LiveSnapshot, PublicConfig, TrailPoint } from "@qdrn/shared";
 
 export type Theme = "light" | "dark";
+export type IconTheme = "plane" | "paw" | "heart" | "ufo";
 
 function initialTheme(): Theme {
   try {
@@ -13,6 +14,16 @@ function initialTheme(): Theme {
   return "light"; // default light
 }
 
+function initialIconTheme(): IconTheme {
+  try {
+    const saved = localStorage.getItem("qdrn-icon-theme");
+    if (saved === "plane" || saved === "paw" || saved === "heart" || saved === "ufo") return saved;
+  } catch {
+    /* ignore */
+  }
+  return "plane";
+}
+
 interface RadarState {
   config: PublicConfig | null;
   aircraft: Aircraft[];
@@ -22,12 +33,14 @@ interface RadarState {
   selectedHex: string | null;
   selectedTrail: TrailPoint[] | null;
   theme: Theme;
+  iconTheme: IconTheme;
   setConfig: (c: PublicConfig) => void;
   applySnapshot: (s: LiveSnapshot) => void;
   select: (hex: string | null) => void;
   setSelectedTrail: (t: TrailPoint[] | null) => void;
   setTheme: (t: Theme) => void;
   toggleTheme: () => void;
+  setIconTheme: (t: IconTheme) => void;
   selected: () => Aircraft | null;
 }
 
@@ -40,6 +53,7 @@ export const useRadar = create<RadarState>((set, get) => ({
   selectedHex: null,
   selectedTrail: null,
   theme: initialTheme(),
+  iconTheme: initialIconTheme(),
 
   setConfig: (config) => set({ config }),
 
@@ -53,6 +67,10 @@ export const useRadar = create<RadarState>((set, get) => ({
   setSelectedTrail: (selectedTrail) => set({ selectedTrail }),
   setTheme: (theme) => set({ theme }),
   toggleTheme: () => set((s) => ({ theme: s.theme === "light" ? "dark" : "light" })),
+  setIconTheme: (iconTheme) => {
+    try { localStorage.setItem("qdrn-icon-theme", iconTheme); } catch { /* ignore */ }
+    set({ iconTheme });
+  },
   selected: () => {
     const { selectedHex, byHex } = get();
     return selectedHex ? byHex[selectedHex] ?? null : null;

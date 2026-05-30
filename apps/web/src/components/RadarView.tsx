@@ -8,8 +8,10 @@ import { AchievementsPanel } from "./AchievementsPanel";
 import { FactBanner } from "./FactBanner";
 import { FlightList } from "./FlightList";
 import { StatsPanel } from "./StatsPanel";
+import { SeasonalOverlay } from "./SeasonalOverlay";
 import { Settings } from "./Settings";
 import { ThemeToggle } from "./ThemeToggle";
+import { Toasts } from "./Toasts";
 
 type Panel = "flights" | "stats" | "achievements" | "settings";
 
@@ -81,6 +83,8 @@ export function RadarView(): JSX.Element {
 
       <AircraftDetail />
       <FactBanner />
+      <SeasonalOverlay />
+      <Toasts />
     </div>
   );
 }
@@ -107,16 +111,32 @@ function DrawerStatus(): JSX.Element {
   const dateStr = now.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
   const timeStr = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true });
   const tempF = tempC != null ? Math.round(tempC * 9 / 5 + 32) : null;
-  const hot = tempF != null && tempF >= 140;
+  const heat = describeHeat(tempF);
 
   return (
     <div className="drawer-status">
       <span className="drawer-status-when">{dateStr} · {timeStr}</span>
       {tempF != null && (
-        <span className="drawer-status-temp" style={{ color: hot ? "var(--danger)" : "var(--muted)" }}>
-          CPU {tempF}°F{hot ? " 🔥" : ""}
+        <span
+          className="drawer-status-temp"
+          style={{ color: heat.color }}
+          title={heat.hint}
+        >
+          CPU {tempF}°F{heat.emoji ? ` ${heat.emoji}` : ""}{heat.label ? ` · ${heat.label}` : ""}
         </span>
       )}
     </div>
   );
+}
+
+/** Map Pi CPU temp (°F) to a one-line vibe-check. Crosses into the danger zone
+ *  above ~170°F where throttling kicks in on a Pi 4/5. */
+function describeHeat(tempF: number | null): { emoji: string; label: string; color: string; hint: string } {
+  if (tempF == null) return { emoji: "", label: "", color: "var(--muted)", hint: "" };
+  if (tempF >= 185) return { emoji: "🚨", label: "lava mode",      color: "var(--danger)", hint: "Throttling — give the Pi some air." };
+  if (tempF >= 175) return { emoji: "🔥", label: "working overtime", color: "var(--danger)", hint: "It's working overtime — maybe pop a fan in." };
+  if (tempF >= 160) return { emoji: "🥵", label: "toasty",         color: "var(--danger)", hint: "Toasty. Watch for throttling above 175°F." };
+  if (tempF >= 140) return { emoji: "♨️", label: "warm",           color: "#e0a83e",       hint: "Warm and happy." };
+  if (tempF <= 60)  return { emoji: "🧊", label: "chilly",         color: "var(--accent)", hint: "Cooler than a hangar fridge." };
+  return { emoji: "", label: "", color: "var(--muted)", hint: "" };
 }

@@ -109,9 +109,15 @@ def connect_wifi(req: dict) -> dict:
 
 
 def scan_wifi(_req: dict) -> dict:
-    """Force a fresh WiFi scan and return nearby APs (deduped, signal-sorted)."""
-    shell(["nmcli", "device", "wifi", "rescan"], timeout=12)
-    r = shell(["nmcli", "-t", "-f", "SSID,SECURITY,SIGNAL", "device", "wifi", "list"])
+    """Force a fresh WiFi scan and return nearby APs (deduped, signal-sorted).
+    Uses `nmcli ... --rescan yes` so we BLOCK on the scan completing — the
+    older "rescan; then list" approach returned stale data because rescan
+    returns before the radio finishes hopping channels."""
+    r = shell(
+        ["nmcli", "--escape", "no", "-t",
+         "-f", "SSID,SECURITY,SIGNAL", "device", "wifi", "list", "--rescan", "yes"],
+        timeout=20,
+    )
     nets, seen = [], set()
     for line in r.stdout.split("\n"):
         if not line.strip():
