@@ -1,9 +1,12 @@
 import { useState } from "react";
+import { EXTRA_FACTS } from "./facts-extra";
 
-/** Hand-curated facts. Aviation, dogs, animals — the kind of trivia Madison
- *  loves. Picked deterministically by day-of-year + click count so each day
- *  has a "fact of the day" but the user can tap to cycle. */
-const FACTS: string[] = [
+/** Hand-curated facts. The first ~68 are conversational ("Concorde could
+ *  cross the Atlantic faster than the Earth rotated…") and lean into Madison
+ *  + dog + Frontier-animals trivia. The rest is a 1000-entry "Did you know"
+ *  pack covering parts, navigation, safety, airports, words/culture, etc.,
+ *  appended from facts-extra. Total ≈ 1068. */
+const CURATED: string[] = [
   // Aviation history
   "On Dec 17, 1903, the Wright brothers' first powered flight lasted just 12 seconds and covered 120 ft — shorter than the wingspan of a Boeing 747.",
   "The world's shortest scheduled flight is between Westray and Papa Westray in Scotland — 1.7 miles, about 90 seconds.",
@@ -84,6 +87,8 @@ const FACTS: string[] = [
   "It's traditional in some U.S. airlines for the captain to read a small fact about the destination during cruise — a tip of the hat to early Pan Am days.",
   "Pilots refer to the typing motion of pressing many buttons in sequence as 'twiddling'.",
 ];
+
+const FACTS: string[] = [...CURATED, ...EXTRA_FACTS];
 
 const SEEN_KEY = "qdrn-facts-seen";
 
