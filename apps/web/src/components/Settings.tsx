@@ -170,6 +170,9 @@ export function Settings(): JSX.Element {
       {/* adsb.lol — free position-aware route source */}
       <AdsblolSection pin={pin} enabled={s.adsblolEnabled} status={conn?.adsblol} onChanged={() => void load(pin)} />
 
+      {/* "Not on my radar" — adsb.lol fill-in for planes outside reception */}
+      <OffRadarSection pin={pin} enabled={s.offRadarEnabled} onChanged={() => void load(pin)} />
+
       {/* AeroAPI usage + spend guard (direct mode; the gateway meters its own) */}
       {!(s.gateway.url && s.gateway.key) && <AeroSection pin={pin} aero={s.aero} onChanged={() => void load(pin)} />}
 
@@ -434,6 +437,50 @@ function AdsblolSection({
             onClick={() => void onToggle()}
           >
             {busy ? "Saving…" : enabled ? "Disable adsb.lol" : "Enable adsb.lol"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OffRadarSection({
+  pin, enabled, onChanged,
+}: { pin: string; enabled: boolean; onChanged: () => void }): JSX.Element {
+  const [expanded, setExpanded] = useState(false);
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="set-card">
+      <button
+        className="set-collapse-head"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+      >
+        <span style={{ flex: 1, textAlign: "left", fontWeight: 700, fontSize: 13, letterSpacing: 0.3, textTransform: "uppercase", color: "var(--muted)" }}>
+          Off-radar fill (adsb.lol)
+        </span>
+        <span className="muted" style={{ fontSize: 12, marginRight: 8 }}>{enabled ? "on" : "off"}</span>
+        <span className="set-collapse-chev" style={{ transform: expanded ? "rotate(90deg)" : "none" }}>›</span>
+      </button>
+      {expanded && (
+        <div style={{ marginTop: 10 }}>
+          <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
+            Pulls planes within ~1.2× your widest range ring from the adsb.lol
+            global feed so terrain shadows / horizon drop-outs aren't dead
+            zones. Off-radar planes render dimmed and tagged 📡 in the list.
+            Local readings always win. Refreshes every 20s; respects the
+            master adsb.lol toggle.
+          </p>
+          <button
+            className="btn btn-block"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              try { await api.saveOffRadar(pin, !enabled); onChanged(); }
+              finally { setBusy(false); }
+            }}
+          >
+            {busy ? "Saving…" : enabled ? "Disable off-radar fill" : "Enable off-radar fill"}
           </button>
         </div>
       )}

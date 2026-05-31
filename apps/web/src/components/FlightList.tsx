@@ -16,11 +16,13 @@ export function FlightList(): JSX.Element {
       {sorted.map((a) => {
         const e = a.enrichment;
         const animal = frontierAnimal(a);
+        const offRadar = a.source === "adsblol";
         return (
           <div
             key={a.hex}
             className={`list-row${a.hex === selectedHex ? " sel" : ""}`}
             onClick={() => select(a.hex)}
+            style={offRadar ? { opacity: 0.6 } : undefined}
           >
             <div
               style={{
@@ -35,6 +37,7 @@ export function FlightList(): JSX.Element {
               <div className="cs">
                 {label(a)}
                 {animal && <span title="Frontier — every tail is an animal" style={{ marginLeft: 6 }}>{animal}</span>}
+                {offRadar && <span title="Off-radar fill-in from adsb.lol" style={{ marginLeft: 6, fontSize: 12 }}>📡</span>}
                 {a.flagged && <span className="pill warn" style={{ marginLeft: 6 }}>★</span>}
               </div>
               <div className="sub" style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>

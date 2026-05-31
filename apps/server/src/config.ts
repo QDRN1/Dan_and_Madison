@@ -88,6 +88,7 @@ const SETTING_KEYS = {
   homeWifiFirstAt: "homeWifi.firstAt",
   homeWifiName: "homeWifi.name",
   adsblolEnabled: "adsb.lol.enabled",
+  offRadarEnabled: "offRadar.enabled",
 } as const;
 
 export function getReceiver(): ReceiverInfo {
@@ -293,4 +294,18 @@ export function isAdsblolEnabled(): boolean {
 
 export function setAdsblolEnabled(enabled: boolean): void {
   setSetting(SETTING_KEYS.adsblolEnabled, String(enabled));
+}
+
+/** "Off-radar" fill-in via adsb.lol's nearby feed. OFF by default — it adds
+ *  ~one HTTP call every 20s to an external service. When on, planes outside
+ *  the Pi's reception are pulled from adsb.lol and rendered dimmed on the
+ *  map. Local readings always win on collision. */
+export function isOffRadarEnabled(): boolean {
+  const raw = getSetting(SETTING_KEYS.offRadarEnabled);
+  if (raw == null) return env("OFF_RADAR_ENABLED", "false") === "true";
+  return raw === "true";
+}
+
+export function setOffRadarEnabled(enabled: boolean): void {
+  setSetting(SETTING_KEYS.offRadarEnabled, String(enabled));
 }

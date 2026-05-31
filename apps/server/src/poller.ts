@@ -5,6 +5,8 @@ import { recordCoverage } from "./coverage.js";
 import { enrich } from "./enrichment.js";
 import { bearing, distanceNm } from "./geo.js";
 import { isFlagged, pruneOldSightings, recordSighting } from "./stats.js";
+import { isOffRadarEnabled } from "./config.js";
+import { getOffRadarSnapshot } from "./off-radar.js";
 
 const TRAIL_MAX_POINTS = 250;
 const TRAIL_MAX_AGE_MS = 45 * 60 * 1000;
@@ -58,9 +60,22 @@ class AircraftStore extends EventEmitter {
 
   getSnapshot(): LiveSnapshot {
     const receiver = getReceiver();
+    const local = [...this.aircraft.values()].filter((a) => a.lat != null && a.lon != null);
+    // Off-radar fill from adsb.lol — only injected when the user opted in.
+    // Local readings always win on hex collision so the Pi's own data is
+    // canonical for anything in range. Radius defaults to 20% beyond the
+    // outermost range ring so the fill barely overlaps our reception.
+    let merged = local;
+    if (isOffRadarEnabled()) {
+      const localHexes = new Set(local.map((a) => a.hex));
+      const radius = Math.max(...receiver.rangeRingsNm, 100) * 1.2;
+      const off = getOffRadarSnapshot({ lat: receiver.lat, lon: receiver.lon, radiusNm: radius })
+        .filter((a) => !localHexes.has(a.hex));
+      merged = [...local, ...off];
+    }
     return {
       now: this.lastNow || Date.now(),
-      aircraft: [...this.aircraft.values()].filter((a) => a.lat != null && a.lon != null),
+      aircraft: merged,
       messageRate: this.messageRate,
       receiver,
     };

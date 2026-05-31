@@ -120,24 +120,66 @@ export function MapView(): JSX.Element {
     if (map.hasImage("plane")) map.removeImage("plane");
     map.addImage("plane", makePlaneImage(icon), { sdf: true, pixelRatio: 4 });
 
-    // Surface airport runways/taxiways earlier (the basemap hides them until
-    // you zoom way in) and make runways bold enough to read at wide zoom so
-    // major airports are recognizable as "airport-shaped" from out-of-state.
+    // Surface airport runways much further out (from z4, country-scale) and
+    // hammer the contrast so major airports are visible without zooming in.
+    // The runway color is hardcoded — relying on theme variables left them
+    // washed out on the light basemap. A wider accent-green casing layer
+    // rides underneath at wide zoom to act as a "glow" so airports pop out
+    // of the basemap; it fades out once the runway itself is thick enough
+    // to stand on its own.
+    const runwayColor = t === "dark" ? "#f3f6fb" : "#001533";
+    const glowColor = "#A3C940";
+
+    // Glow casing. Inserted before the existing runway layer so it renders
+    // beneath. Same source/source-layer; runway lookup tells us which to use.
+    const runwayLayer = map.getLayer("aeroway-runway") as { source?: string; "source-layer"?: string } | undefined;
+    if (runwayLayer?.source) {
+      if (map.getLayer("runway-glow")) map.removeLayer("runway-glow");
+      map.addLayer({
+        id: "runway-glow",
+        type: "line",
+        source: runwayLayer.source,
+        "source-layer": runwayLayer["source-layer"] ?? "aeroway",
+        filter: ["==", ["get", "class"], "runway"],
+        minzoom: 4,
+        maxzoom: 11,
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-color": glowColor,
+          "line-blur": 2,
+          "line-opacity": [
+            "interpolate", ["linear"], ["zoom"],
+            4, 0.85,
+            8, 0.5,
+            11, 0,
+          ],
+          "line-width": [
+            "interpolate", ["linear"], ["zoom"],
+            4, 4,
+            6, 6,
+            9, 9,
+            11, 11,
+          ],
+        },
+      }, "aeroway-runway");
+    }
+
     for (const id of ["aeroway-runway", "aeroway-taxiway"]) {
       if (!map.getLayer(id)) continue;
       try {
-        map.setLayerZoomRange(id, id === "aeroway-runway" ? 6 : 9, 24);
+        map.setLayerZoomRange(id, id === "aeroway-runway" ? 4 : 9, 24);
         map.setPaintProperty(id, "line-opacity", id === "aeroway-runway" ? 1 : 0.6);
         map.setPaintProperty(id, "line-width", [
           "interpolate",
           ["linear"],
           ["zoom"],
-          6,  id === "aeroway-runway" ? 1.8 : 0.4,
-          9,  id === "aeroway-runway" ? 3   : 0.6,
-          12, id === "aeroway-runway" ? 5   : 1.5,
-          14, id === "aeroway-runway" ? 7   : 2.5,
+          4,  id === "aeroway-runway" ? 2   : 0.3,
+          6,  id === "aeroway-runway" ? 2.8 : 0.4,
+          9,  id === "aeroway-runway" ? 4   : 0.7,
+          12, id === "aeroway-runway" ? 6   : 1.6,
+          14, id === "aeroway-runway" ? 8   : 2.6,
         ]);
-        if (id === "aeroway-runway") map.setPaintProperty(id, "line-color", col.label);
+        if (id === "aeroway-runway") map.setPaintProperty(id, "line-color", runwayColor);
       } catch {
         /* layer shape differs on this basemap — skip */
       }
@@ -273,7 +315,12 @@ export function MapView(): JSX.Element {
           "icon-allow-overlap": true,
           "icon-ignore-placement": true,
         },
-        paint: { "icon-color": ["get", "color"] },
+        paint: {
+          "icon-color": ["get", "color"],
+          // Off-radar planes from adsb.lol render at 45% so it's obvious
+          // they're fill-in rather than receiver-tracked.
+          "icon-opacity": ["case", ["==", ["get", "offRadar"], 1], 0.45, 1],
+        },
       });
     }
     if (!map.getLayer("ac-label")) {
@@ -330,6 +377,9 @@ export function MapView(): JSX.Element {
             track: a.track ?? 0,
             color: altColor(altFeet(a)),
             selected: a.hex === cur.selectedHex ? 1 : 0,
+            // 1 when the plane is fill-in from adsb.lol, 0 for local radar.
+            // The ac-plane layer reads this to dim off-radar icons.
+            offRadar: a.source === "adsblol" ? 1 : 0,
           },
           geometry: { type: "Point", coordinates: [a.lon!, a.lat!] },
         })),

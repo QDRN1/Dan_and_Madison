@@ -43,9 +43,11 @@ import {
   getReceiver,
   getSetupPin,
   isAdsblolEnabled,
+  isOffRadarEnabled,
   isPinSet,
   noteHomeWifi,
   setAdsblolEnabled,
+  setOffRadarEnabled,
   setAeroApiConfig,
   setApiKey,
   setGatewayConfig,
@@ -58,6 +60,7 @@ import { getConnections } from "../connections.js";
 import { getCoverage } from "../coverage.js";
 import { clearEnrichmentCache, enrich } from "../enrichment.js";
 import { adminResetStats, getDeviceInfo } from "../admin.js";
+import { deriveFreeRouteTimes } from "../derived-times.js";
 import { fetchExtendedTrack } from "../extended-track.js";
 import { applyFeedersInBackground, writeFeederEnv } from "../feeder.js";
 import { store } from "../poller.js";
@@ -134,7 +137,18 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
     // external points that overlap the session window so we don't double up.
     const sessionStart = session.length > 0 ? session[0]!.t : Number.POSITIVE_INFINITY;
     const trail = [...ext.filter((p) => p.t < sessionStart), ...session];
-    return reply.send({ hex, trail, sources: ext.length > 0 ? ["adsblol", "session"] : ["session"] });
+    // Free-derived flight times: actualOff from the trace, progress + ETA
+    // from live position vs the destination airport. Skips fields the paid
+    // path already filled in so AeroAPI values stay authoritative.
+    const ac = store.get(hex);
+    const route = ac?.enrichment?.route;
+    const derivedRoute = ac && route ? deriveFreeRouteTimes(ac, route, trail) : undefined;
+    return reply.send({
+      hex,
+      trail,
+      sources: ext.length > 0 ? ["adsblol", "session"] : ["session"],
+      route: derivedRoute,
+    });
   });
 
   app.get("/stats", async () => {
@@ -264,8 +278,16 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
       aero: aeroStatus(),
       gateway: getGatewayConfig(),
       adsblolEnabled: isAdsblolEnabled(),
+      offRadarEnabled: isOffRadarEnabled(),
     };
     return settings;
+  });
+
+  app.post<{ Body: { pin?: string; enabled?: boolean } }>("/setup/off-radar", async (req, reply) => {
+    if (!pinOk(req.body?.pin)) return reply.code(401).send({ error: "bad_pin" });
+    if (typeof req.body?.enabled !== "boolean") return reply.code(400).send({ error: "bad_request" });
+    setOffRadarEnabled(req.body.enabled);
+    return { ok: true, enabled: isOffRadarEnabled() };
   });
 
   app.post<{ Body: { pin?: string; enabled?: boolean } }>("/setup/adsblol", async (req, reply) => {

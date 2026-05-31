@@ -23,9 +23,15 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 export const api = {
   config: () => get<PublicConfig>("/config"),
   aircraft: (hex: string) => get<Aircraft>(`/aircraft/${hex}`),
-  /** Extended track: session trail + adsb.lol historical trace prepended. */
+  /** Extended track + free-derived flight times (actualOff/ETA/progress)
+   *  when AeroAPI isn't in play. The route field is the upgraded route. */
   aircraftTrack: (hex: string) =>
-    get<{ hex: string; trail: import("@qdrn/shared").TrailPoint[]; sources: string[] }>(`/aircraft/${hex}/track`),
+    get<{
+      hex: string;
+      trail: import("@qdrn/shared").TrailPoint[];
+      sources: string[];
+      route?: import("@qdrn/shared").Route;
+    }>(`/aircraft/${hex}/track`),
   snapshot: () => get<LiveSnapshot>("/aircraft"),
   stats: () => get<Stats>("/stats"),
   coverage: () => get<CoveragePoint[]>("/coverage"),
@@ -70,6 +76,8 @@ export const api = {
     post<{ ok: boolean; gateway: { url: string; key: string } }>("/setup/gateway", { pin, url, key }),
   saveAdsblol: (pin: string, enabled: boolean) =>
     post<{ ok: boolean; enabled: boolean }>("/setup/adsblol", { pin, enabled }),
+  saveOffRadar: (pin: string, enabled: boolean) =>
+    post<{ ok: boolean; enabled: boolean }>("/setup/off-radar", { pin, enabled }),
   /** Owner-only admin endpoints (master PIN required server-side). */
   deviceInfo: (pin: string) => post<{
     uptimeHuman: string; load1: number; load5: number; load15: number;

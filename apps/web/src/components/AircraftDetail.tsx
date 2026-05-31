@@ -50,6 +50,11 @@ export function AircraftDetail(): JSX.Element | null {
       .then((t) => {
         if (!alive) return;
         if (t.trail && t.trail.length > 0) setSelectedTrail(t.trail);
+        // Merge free-derived times into the detail so the route block shows
+        // actualOff + ETA + progress when AeroAPI didn't supply them.
+        if (t.route) {
+          setDetail((d) => d ? { ...d, enrichment: { ...(d.enrichment ?? {}), route: t.route } } : d);
+        }
       })
       .catch(() => undefined);
     return () => {

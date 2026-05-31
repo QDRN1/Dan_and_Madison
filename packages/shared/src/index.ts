@@ -36,6 +36,10 @@ export interface Aircraft {
   enrichment?: Enrichment;
   /** Recent position history (only populated on the detail endpoint). */
   trail?: TrailPoint[];
+  /** "adsblol" when this aircraft is sourced from the wider adsb.lol feed
+   *  (off-radar fill-in), absent for local ADS-B receiver readings. The map
+   *  dims off-radar planes so it's obvious which are our own readings. */
+  source?: "local" | "adsblol";
 }
 
 /** A single point in an aircraft's recent flight path. */
@@ -318,6 +322,8 @@ export interface AdminSettings {
   gateway: { url: string; key: string };
   /** Whether the free adsb.lol route source is currently active. */
   adsblolEnabled: boolean;
+  /** Whether the off-radar fill-in (adsb.lol nearby feed) is on. */
+  offRadarEnabled: boolean;
 }
 
 export interface BrandConfig {
