@@ -24,7 +24,7 @@ export function StatsPanel(): JSX.Element {
   if (!stats) return <div className="muted" style={{ padding: 12 }}>Loading stats…</div>;
 
   return (
-    <div className="scroll" style={{ flex: 1, display: "flex", flexDirection: "column", gap: 12 }}>
+    <div className="scroll" style={{ flex: 1, display: "flex", flexDirection: "column", gap: 12, marginRight: -8, paddingRight: 8 }}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <Card label="In view now"    value={stats.current}                 onClick={() => openPopout({ kind: "in-view",  title: "In view now" })} />
         <Card label="Seen today"     value={stats.todayUnique}             onClick={() => openPopout({ kind: "sightings", scope: "today", sort: "recent", title: "Seen today" })} />

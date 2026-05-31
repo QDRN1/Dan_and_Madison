@@ -144,6 +144,36 @@ def scan_wifi(_req: dict) -> dict:
     return {"ok": True, "networks": nets}
 
 
+def restart_radar(_req: dict) -> dict:
+    """Bounce only the qdrn-radar container — feeders stay up. No-op if
+    docker isn't reachable (dev shell)."""
+    repo = os.environ.get("QDRN_REPO", "/opt/qdrn")
+    r = shell(["docker", "compose", "-f", os.path.join(repo, "docker-compose.yml"), "restart", "qdrn-radar"], timeout=60)
+    if r.returncode != 0:
+        return {"ok": False, "error": (r.stderr or r.stdout).strip() or "compose restart failed"}
+    return {"ok": True}
+
+
+def update_radar(_req: dict) -> dict:
+    """`git pull` the repo + pull the latest container image + re-up the
+    radar. Only the radar container churns (`--no-deps`) so the feeders
+    stay running."""
+    repo = os.environ.get("QDRN_REPO", "/opt/qdrn")
+    if not os.path.isdir(repo):
+        return {"ok": False, "error": f"QDRN_REPO not found: {repo}"}
+    compose = ["docker", "compose", "-f", os.path.join(repo, "docker-compose.yml")]
+    steps = [
+        (["git", "-C", repo, "pull", "--ff-only"], 120),
+        (compose + ["pull", "qdrn-radar"], 600),
+        (compose + ["up", "-d", "--no-deps", "qdrn-radar"], 600),
+    ]
+    for cmd, timeout in steps:
+        r = shell(cmd, timeout=timeout)
+        if r.returncode != 0:
+            return {"ok": False, "error": f"{' '.join(cmd)}: {(r.stderr or r.stdout).strip()[:400]}"}
+    return {"ok": True}
+
+
 def handle(req: dict) -> dict:
     op = req.get("op")
     if op == "list":
@@ -156,6 +186,10 @@ def handle(req: dict) -> dict:
         return connect_wifi(req)
     if op == "scan":
         return scan_wifi(req)
+    if op == "restart":
+        return restart_radar(req)
+    if op == "update":
+        return update_radar(req)
     return {"ok": False, "error": f"unknown op: {op!r}"}
 
 

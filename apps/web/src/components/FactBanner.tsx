@@ -101,16 +101,14 @@ function saveSeen(seen: Set<number>): void {
   try { localStorage.setItem(SEEN_KEY, JSON.stringify([...seen])); } catch { /* ignore */ }
 }
 
-/** Pick today's fact. Day-of-year decides the seed, but we walk forward from
- *  that seed skipping any indices the user has already clicked past. */
+/** Pick a fresh fact every page load. Random unseen index; if all 68 have
+ *  been clicked through, the set resets so the rotation can start over. */
 function pickIndex(seen: Set<number>): number {
   if (seen.size >= FACTS.length) seen.clear();
-  const start = Math.floor(Date.now() / 86400000) % FACTS.length;
-  for (let step = 0; step < FACTS.length; step++) {
-    const idx = (start + step) % FACTS.length;
-    if (!seen.has(idx)) return idx;
-  }
-  return start;
+  const unseen: number[] = [];
+  for (let i = 0; i < FACTS.length; i++) if (!seen.has(i)) unseen.push(i);
+  if (unseen.length === 0) return Math.floor(Math.random() * FACTS.length);
+  return unseen[Math.floor(Math.random() * unseen.length)]!;
 }
 
 export function FactBanner(): JSX.Element {

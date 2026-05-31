@@ -23,6 +23,9 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 export const api = {
   config: () => get<PublicConfig>("/config"),
   aircraft: (hex: string) => get<Aircraft>(`/aircraft/${hex}`),
+  /** Extended track: session trail + adsb.lol historical trace prepended. */
+  aircraftTrack: (hex: string) =>
+    get<{ hex: string; trail: import("@qdrn/shared").TrailPoint[]; sources: string[] }>(`/aircraft/${hex}/track`),
   snapshot: () => get<LiveSnapshot>("/aircraft"),
   stats: () => get<Stats>("/stats"),
   coverage: () => get<CoveragePoint[]>("/coverage"),
@@ -67,6 +70,16 @@ export const api = {
     post<{ ok: boolean; gateway: { url: string; key: string } }>("/setup/gateway", { pin, url, key }),
   saveAdsblol: (pin: string, enabled: boolean) =>
     post<{ ok: boolean; enabled: boolean }>("/setup/adsblol", { pin, enabled }),
+  /** Owner-only admin endpoints (master PIN required server-side). */
+  deviceInfo: (pin: string) => post<{
+    uptimeHuman: string; load1: number; load5: number; load15: number;
+    diskUsedPct: number; diskFreeHuman: string; cpuTempF: number | null;
+    sightingsCount: number; achievementsEarned: number; achievementsTotal: number;
+    buildSha?: string;
+  }>("/admin/device-info", { pin }),
+  adminResetStats: (pin: string) => post<{ ok: boolean; error?: string }>("/admin/reset-stats", { pin }),
+  adminRestart:    (pin: string) => post<{ ok: boolean; error?: string }>("/admin/restart", { pin }),
+  adminUpdate:     (pin: string) => post<{ ok: boolean; error?: string }>("/admin/update", { pin }),
   wifiList: (pin: string) =>
     post<{ ok: boolean; networks?: WifiNetwork[]; error?: string }>("/setup/wifi", { pin }),
   wifiAdd: (pin: string, ssid: string, password: string, priority: number) =>

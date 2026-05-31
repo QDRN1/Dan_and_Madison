@@ -57,6 +57,8 @@ import { listAchievements } from "../achievements.js";
 import { getConnections } from "../connections.js";
 import { getCoverage } from "../coverage.js";
 import { clearEnrichmentCache, enrich } from "../enrichment.js";
+import { adminResetStats, getDeviceInfo } from "../admin.js";
+import { fetchExtendedTrack } from "../extended-track.js";
 import { applyFeedersInBackground, writeFeederEnv } from "../feeder.js";
 import { store } from "../poller.js";
 import { getStats, listAllTime, listFarthest, listNotable, listSightings, listToday } from "../stats.js";
@@ -118,6 +120,21 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
     const upgraded = await enrich(hex, ac.flight, { paid: true, lat: ac.lat, lon: ac.lon, track: ac.track });
     if (upgraded) ac.enrichment = upgraded;
     return { ...ac, trail: store.getTrail(hex) };
+  });
+
+  // Extended track: pre-pends adsb.lol's historical trace to the session trail
+  // so a freshly-selected plane shows where it came from before the receiver
+  // saw it. Cached server-side (see fetchExtendedTrack) so opening the same
+  // hex repeatedly doesn't pound the upstream globe.adsb.lol bucket.
+  app.get<{ Params: { hex: string } }>("/aircraft/:hex/track", async (req, reply) => {
+    const hex = req.params.hex.toLowerCase();
+    const session = store.getTrail(hex);
+    const ext = isAdsblolEnabled() ? await fetchExtendedTrack(hex) : [];
+    // Merge: external trace first (older), then session points; drop any
+    // external points that overlap the session window so we don't double up.
+    const sessionStart = session.length > 0 ? session[0]!.t : Number.POSITIVE_INFINITY;
+    const trail = [...ext.filter((p) => p.t < sessionStart), ...session];
+    return reply.send({ hex, trail, sources: ext.length > 0 ? ["adsblol", "session"] : ["session"] });
   });
 
   app.get("/stats", async () => {
@@ -259,6 +276,47 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
     clearEnrichmentCache();
     store.resetEnrichment();
     return { ok: true, enabled: isAdsblolEnabled() };
+  });
+
+  // ── Owner-only admin endpoints ─────────────────────────────────────────────
+  // Master PIN is required (the user PIN intentionally can't unlock these).
+  // adminPinOk runs the same constant-time check as pinOk but only accepts
+  // the master PIN, so even a shared user PIN can't trigger a wipe/update.
+  function adminPinOk(p: unknown): boolean { return isMasterPin(p); }
+
+  app.post<{ Body: { pin?: string } }>("/admin/device-info", async (req, reply) => {
+    if (!adminPinOk(req.body?.pin)) return reply.code(401).send({ error: "owner_required" });
+    return await getDeviceInfo();
+  });
+
+  app.post<{ Body: { pin?: string } }>("/admin/reset-stats", async (req, reply) => {
+    if (!adminPinOk(req.body?.pin)) return reply.code(401).send({ error: "owner_required" });
+    try {
+      adminResetStats();
+      return { ok: true as const };
+    } catch (e) {
+      return { ok: false as const, error: (e as Error).message };
+    }
+  });
+
+  app.post<{ Body: { pin?: string } }>("/admin/restart", async (req, reply) => {
+    if (!adminPinOk(req.body?.pin)) return reply.code(401).send({ error: "owner_required" });
+    try {
+      const r = await netd<{ ok: boolean; error?: string }>({ op: "restart" });
+      return r;
+    } catch (e) {
+      return { ok: false, error: `netd unavailable: ${(e as Error).message}` };
+    }
+  });
+
+  app.post<{ Body: { pin?: string } }>("/admin/update", async (req, reply) => {
+    if (!adminPinOk(req.body?.pin)) return reply.code(401).send({ error: "owner_required" });
+    try {
+      const r = await netd<{ ok: boolean; error?: string }>({ op: "update" });
+      return r;
+    } catch (e) {
+      return { ok: false, error: `netd unavailable: ${(e as Error).message}` };
+    }
   });
 
   app.post<{ Body: { pin?: string; url?: string; key?: string } }>("/setup/gateway", async (req, reply) => {

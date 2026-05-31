@@ -5,6 +5,11 @@ Wants=NetworkManager.service
 
 [Service]
 Type=simple
+# QDRN_REPO points at the cloned repo on the host so the `update` op can
+# `git pull` and `docker compose` against the right working tree. Overridden
+# by the install script when it writes /etc/default/qdrn-netd.
+EnvironmentFile=-/etc/default/qdrn-netd
+Environment=QDRN_REPO=/opt/qdrn
 ExecStart=/usr/bin/python3 /usr/local/sbin/qdrn-netd.py
 Restart=always
 RestartSec=5

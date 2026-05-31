@@ -35,6 +35,7 @@ function statusInfo(status: ConnStatus | undefined, set: boolean, feeder: boolea
 export function Settings(): JSX.Element {
   const setConfig = useRadar((s) => s.setConfig);
   const [unlocked, setUnlocked] = useState(false);
+  const [isMaster, setIsMaster] = useState(false);
   const [pin, setPin] = useState("");
   const [entry, setEntry] = useState("");
   const [err, setErr] = useState(false);
@@ -64,6 +65,10 @@ export function Settings(): JSX.Element {
       setErr(false);
       sessionStorage.setItem(PIN_KEY, p);
       void loadConn(p);
+      // Check whether this PIN authenticated via the master override so the
+      // hidden admin card can appear. /setup/verify-pin returns { master:true }
+      // only when the master PIN was provided; user PIN never sets it true.
+      api.verifyPin(p).then((r) => setIsMaster(Boolean(r.master))).catch(() => setIsMaster(false));
       return true;
     } catch {
       sessionStorage.removeItem(PIN_KEY);
@@ -167,6 +172,9 @@ export function Settings(): JSX.Element {
 
       {/* AeroAPI usage + spend guard (direct mode; the gateway meters its own) */}
       {!(s.gateway.url && s.gateway.key) && <AeroSection pin={pin} aero={s.aero} onChanged={() => void load(pin)} />}
+
+      {/* Owner-only admin (master PIN) */}
+      {isMaster && <AdminSection pin={pin} />}
 
       {/* Change PIN */}
       <PinSection currentPin={pin} onChanged={(p) => { sessionStorage.setItem(PIN_KEY, p); setPin(p); }} />
@@ -477,6 +485,100 @@ function IconThemeSection(): JSX.Element {
       )}
     </div>
   );
+}
+
+function AdminSection({ pin }: { pin: string }): JSX.Element {
+  const [expanded, setExpanded] = useState(false);
+  const [info, setInfo] = useState<DeviceInfo | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [confirm, setConfirm] = useState("");
+
+  useEffect(() => {
+    if (!expanded || info) return;
+    api.deviceInfo(pin).then(setInfo).catch(() => undefined);
+  }, [expanded, info, pin]);
+
+  async function runDestructive(label: string, fn: () => Promise<{ ok: boolean; error?: string }>): Promise<void> {
+    if (confirm.trim().toUpperCase() !== "CONFIRM") { setMsg(`Type CONFIRM to ${label.toLowerCase()}.`); return; }
+    setBusy(true); setMsg("");
+    try {
+      const r = await fn();
+      setMsg(r.ok ? `${label} ✓` : `${label} failed: ${r.error ?? "unknown"}`);
+      setConfirm("");
+      if (r.ok) setInfo(null); // force refresh
+    } catch (e) {
+      setMsg(`${label} failed: ${(e as Error).message}`);
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <div className="set-card" style={{ borderColor: "var(--danger)" }}>
+      <button
+        className="set-collapse-head"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+      >
+        <span style={{ flex: 1, textAlign: "left", fontWeight: 700, fontSize: 13, letterSpacing: 0.3, textTransform: "uppercase", color: "var(--danger)" }}>
+          🛠 Admin (owner)
+        </span>
+        <span className="set-collapse-chev" style={{ transform: expanded ? "rotate(90deg)" : "none" }}>›</span>
+      </button>
+      {expanded && (
+        <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 10 }}>
+          {info && (
+            <div className="muted" style={{ fontSize: 12, lineHeight: 1.6 }}>
+              <div><b>Uptime:</b> {info.uptimeHuman}</div>
+              <div><b>Load:</b> {info.load1.toFixed(2)}, {info.load5.toFixed(2)}, {info.load15.toFixed(2)}</div>
+              <div><b>Disk:</b> {info.diskUsedPct}% used ({info.diskFreeHuman} free)</div>
+              <div><b>CPU temp:</b> {info.cpuTempF != null ? `${info.cpuTempF.toFixed(0)} °F` : "—"}</div>
+              <div><b>Sightings rows:</b> {info.sightingsCount.toLocaleString()}</div>
+              <div><b>Achievements:</b> {info.achievementsEarned}/{info.achievementsTotal} earned</div>
+              <div><b>Build:</b> {info.buildSha?.slice(0, 7) ?? "unknown"}</div>
+            </div>
+          )}
+          <input
+            className="input"
+            placeholder='Type CONFIRM to enable destructive buttons'
+            value={confirm}
+            onChange={(e) => { setConfirm(e.target.value); setMsg(""); }}
+            autoCapitalize="characters"
+            autoCorrect="off"
+            spellCheck={false}
+          />
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button className="btn" style={{ flex: 1, minWidth: 140 }} disabled={busy}
+                    onClick={() => void runDestructive("Reset stats", () => api.adminResetStats(pin))}>
+              Reset stats
+            </button>
+            <button className="btn" style={{ flex: 1, minWidth: 140 }} disabled={busy}
+                    onClick={() => void runDestructive("Pull update", () => api.adminUpdate(pin))}>
+              Pull update + restart
+            </button>
+            <button className="btn" style={{ flex: 1, minWidth: 140 }} disabled={busy}
+                    onClick={() => void runDestructive("Restart radar", () => api.adminRestart(pin))}>
+              Restart radar
+            </button>
+          </div>
+          <p className="muted" style={{ fontSize: 11, marginTop: 0 }}>
+            Reset stats wipes the sightings/flagged/coverage/achievements tables (settings + WiFi profiles are kept).
+            Pull update runs <code>git pull &amp;&amp; docker compose pull &amp;&amp; up -d</code> on the host.
+          </p>
+          {msg && <div className="muted" style={{ fontSize: 12 }}>{msg}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface DeviceInfo {
+  uptimeHuman: string;
+  load1: number; load5: number; load15: number;
+  diskUsedPct: number; diskFreeHuman: string;
+  cpuTempF: number | null;
+  sightingsCount: number;
+  achievementsEarned: number; achievementsTotal: number;
+  buildSha?: string;
 }
 
 function PinSection({ currentPin, onChanged }: { currentPin: string; onChanged: (newPin: string) => void }): JSX.Element {

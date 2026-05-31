@@ -29,6 +29,9 @@ export function AircraftDetail(): JSX.Element | null {
   const [expanded, setExpanded] = useState(false);
 
   // Pull full enrichment + trail for the detail card when selection changes.
+  // The session trail comes back with the detail fetch; we then upgrade it
+  // with adsb.lol's historical trace so the map shows where the plane came
+  // from before our receiver started seeing it.
   useEffect(() => {
     setDetail(null);
     setExpanded(false);
@@ -40,6 +43,13 @@ export function AircraftDetail(): JSX.Element | null {
         if (!alive) return;
         setDetail(d);
         setSelectedTrail(d.trail ?? []);
+      })
+      .catch(() => undefined);
+    api
+      .aircraftTrack(selectedHex)
+      .then((t) => {
+        if (!alive) return;
+        if (t.trail && t.trail.length > 0) setSelectedTrail(t.trail);
       })
       .catch(() => undefined);
     return () => {

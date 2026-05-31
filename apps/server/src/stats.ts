@@ -44,6 +44,72 @@ function today(): string {
 const EMERGENCY_SQUAWKS = new Set(["7500", "7600", "7700"]);
 const MIL_KEYWORDS = /\b(air force|navy|army|military|nato|royal air|marine|coast guard|national guard)\b/i;
 
+/** Regional carrier → mainline brand the passenger thinks they bought. Used
+ *  to roll up aggregations (top-operators, airline facet) since the ticket
+ *  reads "Delta" even when the metal is Endeavor / Skywest / GoJet / etc.
+ *  Lookup is case-insensitive; original operator stays in the row so the
+ *  detail card can still show the real contractor. */
+const REGIONAL_TO_MAINLINE: Record<string, string> = {
+  // Delta family
+  "delta connection": "Delta Air Lines",
+  "endeavor air": "Delta Air Lines",
+  "skywest dba delta connection": "Delta Air Lines",
+  "republic dba delta connection": "Delta Air Lines",
+  // American family
+  "american eagle": "American Airlines",
+  "envoy air": "American Airlines",
+  "piedmont airlines": "American Airlines",
+  "psa airlines": "American Airlines",
+  "air wisconsin": "American Airlines",
+  "skywest dba american eagle": "American Airlines",
+  "republic dba american eagle": "American Airlines",
+  // United family
+  "united express": "United Airlines",
+  "mesa airlines": "United Airlines",
+  "gojet airlines": "United Airlines",
+  "commuteair": "United Airlines",
+  "skywest dba united express": "United Airlines",
+  "republic dba united express": "United Airlines",
+  // Alaska family
+  "horizon air": "Alaska Airlines",
+  "skywest dba alaska": "Alaska Airlines",
+};
+
+function normalizeOperator(name: string | null | undefined): string | null {
+  if (!name) return null;
+  const key = name.trim().toLowerCase();
+  return REGIONAL_TO_MAINLINE[key] ?? name;
+}
+
+/** Inverse map: mainline display name → every raw operator name that folds
+ *  to it (including itself). Used when filtering by airline so picking
+ *  "Delta Air Lines" also matches rows stored as "Delta Connection". */
+function operatorAliases(mainline: string): string[] {
+  const set = new Set<string>([mainline]);
+  for (const [raw, mapped] of Object.entries(REGIONAL_TO_MAINLINE)) {
+    if (mapped === mainline) {
+      // Capitalize first letter for parity with how operator names normally
+      // arrive — but match the raw map key too in case the DB has it that way.
+      set.add(raw);
+      set.add(raw.replace(/\b\w/g, (c) => c.toUpperCase()));
+    }
+  }
+  return [...set];
+}
+
+/** Roll up a {name, count}[] facet by the mainline mapping, summing counts
+ *  and resorting. Returns the same shape callers already use. */
+function foldOperatorFacet(rows: { name: string; count: number }[], topN: number): { name: string; count: number }[] {
+  const merged = new Map<string, number>();
+  for (const r of rows) {
+    const k = normalizeOperator(r.name)!;
+    merged.set(k, (merged.get(k) ?? 0) + r.count);
+  }
+  return [...merged].map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, topN);
+}
+
 // Dedup flagged inserts to once-per-hex-per-day.
 const flaggedToday = new Set<string>();
 let flaggedDay = today();
@@ -176,13 +242,15 @@ export function getStats(current: number): Stats {
   const allTimeUnique = (db.prepare("SELECT COUNT(DISTINCT hex) n FROM sightings").get() as { n: number }).n;
   const maxRange = (db.prepare("SELECT COALESCE(MAX(max_dist_nm), 0) m FROM sightings WHERE day = ?").get(day) as { m: number }).m;
 
-  const topOperators = (
-    db
-      .prepare(
-        "SELECT operator name, COUNT(*) count FROM sightings WHERE day = ? AND operator IS NOT NULL AND operator != '' GROUP BY operator ORDER BY count DESC LIMIT 5",
-      )
-      .all(day) as { name: string; count: number }[]
-  );
+  // Pull more rows than we render so post-fold the top 5 are still accurate
+  // (rolling Delta Connection + Endeavor into Delta can lift one out of the
+  // raw top-5 cut). 20 is plenty for the typical operator distribution.
+  const rawOperators = db
+    .prepare(
+      "SELECT operator name, COUNT(*) count FROM sightings WHERE day = ? AND operator IS NOT NULL AND operator != '' GROUP BY operator ORDER BY count DESC LIMIT 20",
+    )
+    .all(day) as { name: string; count: number }[];
+  const topOperators = foldOperatorFacet(rawOperators, 5);
 
   const topTypes = (
     db
@@ -249,8 +317,11 @@ export function listSightings(filter: SightingFilter): SightingPage {
   const params: unknown[] = [...scopeParams];
 
   if (filter.airline && filter.airline.trim()) {
-    whereParts.push("operator = ?");
-    params.push(filter.airline.trim());
+    // Expand the mainline display name to every regional variant so picking
+    // "Delta Air Lines" also surfaces Endeavor/Skywest etc.
+    const aliases = operatorAliases(filter.airline.trim());
+    whereParts.push(`LOWER(operator) IN (${aliases.map(() => "?").join(",")})`);
+    params.push(...aliases.map((a) => a.toLowerCase()));
   }
   if (filter.q && filter.q.trim()) {
     const like = `%${filter.q.trim().toLowerCase()}%`;
@@ -287,13 +358,14 @@ export function listSightings(filter: SightingFilter): SightingPage {
     : `SELECT COUNT(*) n FROM sightings WHERE ${where}`;
   const total = (db.prepare(totalSql).get(...params) as { n: number }).n;
 
-  // Airline facet — top 30 by count within the same scope (no q/airline filter
-  // applied so the dropdown shows the full set, not just what's visible).
-  const airlines = db.prepare(
+  // Airline facet — pull a wider raw set then fold regionals into mainlines
+  // so the dropdown shows "Delta Air Lines" once with the combined count.
+  const rawAirlines = db.prepare(
     `SELECT operator AS name, COUNT(DISTINCT hex) AS count
      FROM sightings WHERE ${scopeSql} AND operator IS NOT NULL AND operator != ''
-     GROUP BY operator ORDER BY count DESC LIMIT 30`,
+     GROUP BY operator ORDER BY count DESC LIMIT 60`,
   ).all(...scopeParams) as { name: string; count: number }[];
+  const airlines = foldOperatorFacet(rawAirlines, 30);
 
   return { rows, total, airlines };
 }
