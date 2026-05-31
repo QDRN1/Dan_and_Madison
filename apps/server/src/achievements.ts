@@ -194,6 +194,14 @@ const DEFS: (AchievementDef & {
   // unlocks on the calendar match. Repeats every year after that.
   { id: "radarversary", icon: "🎂", hint: "One trip around the sun", title: "Radar-versary",
     test: () => isRadarVersary() },
+
+  // Sentinel achievement to sanity-check the predicate path against a known
+  // callsign. Emirates UAE83M is rare enough to be obvious when it fires,
+  // common enough to actually catch (it operates a regular DXB rotation).
+  // Once it shows up in the badges, the achievement engine is confirmed
+  // healthy end-to-end.
+  { id: "uae83m_spotter", icon: "🇦🇪", hint: "Catch Emirates UAE83M", title: "Emirates UAE83M Spotter", once: true,
+    test: (c) => (c.ac.flight ?? "").trim().toUpperCase() === "UAE83M" },
 ];
 
 // ─── Persistence ────────────────────────────────────────────────────────────
