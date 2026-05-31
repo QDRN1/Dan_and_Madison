@@ -8,6 +8,7 @@ import { AchievementsPanel } from "./AchievementsPanel";
 import { FactBanner } from "./FactBanner";
 import { FlightList } from "./FlightList";
 import { StatsPanel } from "./StatsPanel";
+import { AltitudeLegend } from "./AltitudeLegend";
 import { SeasonalOverlay } from "./SeasonalOverlay";
 import { Settings } from "./Settings";
 import { SightingsPopout } from "./SightingsPopout";
@@ -18,9 +19,11 @@ type Panel = "flights" | "stats" | "achievements" | "settings";
 
 export function RadarView(): JSX.Element {
   const config = useRadar((s) => s.config);
-  const count = useRadar((s) => s.aircraft.filter((a) => a.lat != null).length);
+  // Counting separately avoids re-rendering the entire topbar every snapshot
+  // when only the live count changes.
   const stormOn = useRadar((s) => s.stormOverlay);
   const toggleStorm = useRadar((s) => s.toggleStorm);
+  const openPopout = useRadar((s) => s.openPopout);
   const [open, setOpen] = useState(false);
   const [panel, setPanel] = useState<Panel>("flights");
 
@@ -45,14 +48,12 @@ export function RadarView(): JSX.Element {
           </div>
         </div>
         <div className="spacer" />
-        <div className="live glass">
-          <span className="dot" /> {count} <span className="muted" style={{ fontWeight: 600 }}>tracking</span>
-        </div>
+        <LiveCountPill onClick={() => openPopout({ kind: "in-view", title: "Tracking now" })} />
         <button
           className={`iconbtn glass${stormOn ? " active" : ""}`}
           onClick={toggleStorm}
           aria-label="Storm radar"
-          title={stormOn ? "Storm radar on (tap to hide)" : "Show storm radar"}
+          title={stormOn ? "Storm radar on (tap to hide)" : "Show storm radar (zooms to area view)"}
         >
           {stormOn ? "⛈️" : "🌦️"}
         </button>
@@ -97,12 +98,33 @@ export function RadarView(): JSX.Element {
       <SeasonalOverlay />
       <Toasts />
       <SightingsPopout />
+      <AltitudeLegendWrapper />
     </div>
   );
 }
 
 /** Persistent status row at the top of the menu drawer: local date + 12-hour
  *  time, and the Pi's SoC temp in °F. Stays visible across all tabs. */
+function AltitudeLegendWrapper(): JSX.Element {
+  const selected = useRadar((s) => s.selectedHex);
+  // Tuck the legend away while a plane's detail card is on screen — the
+  // card is the same color information in context, and the legend would
+  // crowd the bottom edge on phones.
+  return <AltitudeLegend hidden={!!selected} />;
+}
+
+/** Live tracking count pill in the topbar. Selectors are scoped to the count
+ *  itself so other topbar UI doesn't re-render on every snapshot. Clicking it
+ *  opens the In view popout. */
+function LiveCountPill({ onClick }: { onClick: () => void }): JSX.Element {
+  const count = useRadar((s) => s.aircraft.filter((a) => a.lat != null).length);
+  return (
+    <button className="live glass live-pill" onClick={onClick} title="Show all aircraft in view" type="button">
+      <span className="dot" /> {count} <span className="muted" style={{ fontWeight: 600 }}>tracking</span>
+    </button>
+  );
+}
+
 function DrawerStatus(): JSX.Element {
   const [now, setNow] = useState(new Date());
   const [tempC, setTempC] = useState<number | null>(null);

@@ -1116,3 +1116,129 @@
     display: none;
   }
 }
+
+/* ─── Altitude legend ──────────────────────────────────────────────────── */
+.altlegend {
+  position: absolute;
+  left: 12px;
+  bottom: calc(70px + env(safe-area-inset-bottom));
+  z-index: 4;
+  pointer-events: auto;
+}
+.altlegend-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+.altlegend-toggle:hover { border-color: var(--accent); }
+.altlegend-stripe {
+  display: block;
+  width: 6px;
+  height: 22px;
+  border-radius: 3px;
+  background: linear-gradient(
+    to top,
+    #ff4d4d 0%,
+    #ffb300 25%,
+    #a3c940 50%,
+    #5b8def 75%,
+    #b06bff 100%
+  );
+}
+.altlegend.open {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px 10px 14px;
+  min-width: 130px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+}
+.altlegend-close {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  background: transparent;
+  border: none;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 2px 6px;
+}
+.altlegend-close:hover { color: var(--text); }
+.altlegend-title {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.altlegend-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.altlegend-rows li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.altlegend-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  flex: 0 0 auto;
+}
+.altlegend-label { color: var(--text); font-variant-numeric: tabular-nums; }
+
+/* Tracking pill is now clickable. */
+.live-pill {
+  border: none;
+  cursor: pointer;
+  font: inherit;
+}
+.live-pill:hover { background: var(--hover); }
+
+/* Drawer panes scroll with breathing room from the scrollbar. */
+.drawer-body .scroll,
+.drawer-body > .scroll {
+  overflow-y: auto;
+  /* Negative margin pulls the scrollbar back over the drawer edge; matching
+   * padding restores the content's right gutter. Looks the same as
+   * FlightList already does inline. */
+  margin-right: -8px;
+  padding-right: 10px;
+  scrollbar-gutter: stable;
+}
+
+/* Narrow-phone responsive topbar. The live "X tracking" pill collapses to
+ * just "X" so the storm/theme/menu buttons don't get pushed off-screen. */
+@media (max-width: 480px) {
+  .topbar {
+    gap: 6px;
+    padding: 8px 10px;
+    padding-top: calc(8px + env(safe-area-inset-top));
+  }
+  .topbar .live .muted { display: none; }
+  .topbar .live { padding: 6px 10px; font-size: 12px; }
+  .iconbtn { width: 38px; height: 38px; font-size: 16px; }
+  .brand-greeting { font-size: 13px; }
+}
+@media (max-width: 380px) {
+  /* Tightest phones: drop the brand text entirely, just the logo + buttons. */
+  .brand-text { display: none; }
+  .topbar { gap: 5px; }
+}

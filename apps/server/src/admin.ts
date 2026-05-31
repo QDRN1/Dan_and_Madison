@@ -1,5 +1,6 @@
 import { readFileSync, statSync } from "node:fs";
 import { execSync } from "node:child_process";
+import { DEFINED_ACHIEVEMENTS } from "./achievements.js";
 import { db } from "./db.js";
 
 interface DeviceInfo {
@@ -84,7 +85,9 @@ export async function getDeviceInfo(): Promise<DeviceInfo> {
 
   const sightingsCount = (db.prepare("SELECT COUNT(*) n FROM sightings").get() as { n: number }).n;
   const achievementsEarned = (db.prepare("SELECT COUNT(*) n FROM achievements WHERE count > 0").get() as { n: number }).n;
-  const achievementsTotal = (db.prepare("SELECT COUNT(*) n FROM achievements").get() as { n: number }).n;
+  // Denominator is the static count of defined badges, not table rows —
+  // even an unfired achievement is "defined".
+  const achievementsTotal = DEFINED_ACHIEVEMENTS;
 
   return {
     uptimeHuman: humanDuration(uptime),

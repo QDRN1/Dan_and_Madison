@@ -203,6 +203,9 @@ const incStmt = db.prepare<[number, string]>(
   `INSERT INTO achievements (id, count, first_at, last_at) VALUES (?2, 1, ?1, ?1)
    ON CONFLICT(id) DO UPDATE SET count = count + 1, last_at = ?1`,
 );
+const seedStmt = db.prepare<[string]>(
+  `INSERT INTO achievements (id, count) VALUES (?, 0) ON CONFLICT(id) DO NOTHING`,
+);
 const allStmt = db.prepare(`
   SELECT a.id, COALESCE(p.count, 0) AS count, p.first_at, p.last_at
   FROM (SELECT 1) AS dummy
@@ -210,12 +213,24 @@ const allStmt = db.prepare(`
   LEFT JOIN achievements p ON p.id = a.id
 `);
 
+// Make sure every defined achievement has a row from day one — the admin
+// device-info card reads COUNT(*) as the denominator, so unseeded rows
+// produce a misleading "0/0 earned".
+for (const def of DEFS) {
+  try { seedStmt.run(def.id); } catch { /* table not yet ready — first-run race */ }
+}
+
+/** Number of defined achievements — used as the authoritative denominator. */
+export const DEFINED_ACHIEVEMENTS = DEFS.length;
+
 function getCount(id: string): number {
   const row = getStmt.get(id) as { count: number } | undefined;
   return row?.count ?? 0;
 }
 
-/** Run after every recordSighting(). Best-effort; never throws. */
+/** Run after every recordSighting(). Best-effort; never throws — but errors
+ *  are now logged so a misbehaving predicate or column-shape change is
+ *  visible in `docker logs` instead of failing silently. */
 export function checkAll(ctx: Ctx): void {
   const now = Date.now();
   for (const def of DEFS) {
@@ -223,10 +238,68 @@ export function checkAll(ctx: Ctx): void {
       const cur = getCount(def.id);
       if (def.once && cur >= 1) continue;
       if (def.test(ctx, cur)) incStmt.run(now, def.id);
-    } catch {
-      /* swallow */
+    } catch (e) {
+      console.error(`[achievements] ${def.id} threw:`, (e as Error).message);
     }
   }
+}
+
+/** Walk the sightings table and re-run every predicate against each row in
+ *  chronological order. Idempotent — `once` achievements only fire once even
+ *  if you run this repeatedly. Used by the admin "Backfill achievements"
+ *  button to retroactively unlock badges from history when the live path was
+ *  broken at the time. */
+export function backfillAchievements(): { processed: number; fired: number } {
+  const rows = db.prepare(`
+    SELECT hex, day, flight, type_code AS typeCode, type_name AS typeName,
+           operator, origin_icao AS originIcao, dest_icao AS destIcao,
+           first_seen AS firstSeen, last_seen AS lastSeen, max_dist_nm AS maxDistNm
+    FROM sightings ORDER BY first_seen ASC
+  `).all() as Array<{
+    hex: string; day: string; flight: string | null;
+    typeCode: string | null; typeName: string | null; operator: string | null;
+    originIcao: string | null; destIcao: string | null;
+    firstSeen: number; lastSeen: number; maxDistNm: number;
+  }>;
+  let fired = 0;
+  const beforeTotal = (db.prepare("SELECT COALESCE(SUM(count), 0) n FROM achievements").get() as { n: number }).n;
+
+  const todaySeen = new Set<string>();
+  const everSeen = new Set<string>();
+  let curDay = "";
+  let todayUnique = 0;
+  let allTimeUnique = 0;
+
+  for (const r of rows) {
+    if (r.day !== curDay) { curDay = r.day; todaySeen.clear(); todayUnique = 0; }
+    const isNewToday = !todaySeen.has(r.hex);
+    const isNewEver  = !everSeen.has(r.hex);
+    if (isNewToday) { todaySeen.add(r.hex); todayUnique++; }
+    if (isNewEver)  { everSeen.add(r.hex);  allTimeUnique++; }
+
+    const ac: Aircraft = {
+      hex: r.hex,
+      flight: r.flight ?? undefined,
+      enrichment: {
+        typeCode: r.typeCode ?? undefined,
+        typeName: r.typeName ?? undefined,
+        operator: r.operator ?? undefined,
+      },
+      distNm: r.maxDistNm,
+    } as Aircraft;
+
+    checkAll({
+      ac,
+      day: r.day,
+      todayUnique,
+      allTimeUnique,
+      operatorsToday: 0,
+      operatorsAllTime: 0,
+    });
+  }
+  const afterTotal = (db.prepare("SELECT COALESCE(SUM(count), 0) n FROM achievements").get() as { n: number }).n;
+  fired = Math.max(0, afterTotal - beforeTotal);
+  return { processed: rows.length, fired };
 }
 
 /** Snapshot for the UI: every achievement with its hint + (when unlocked) title and count. */

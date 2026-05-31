@@ -5,32 +5,40 @@ import type { CoveragePoint } from "@qdrn/shared";
 import { api } from "../api";
 import { useRadar, type IconTheme, type Theme } from "../store";
 import { altColor, altFeet } from "../format";
+import { MAJOR_AIRPORTS } from "./major-airports";
 
-/** SVG paths for each plane-icon theme — all drawn in a 32x32 viewBox. They
- *  render as SDF so altitude color tints still apply. */
+/** SVG paths for each plane-icon theme — drawn in a 64x64 viewBox so the
+ *  curves keep their fidelity once the SDF resamples. They render with a
+ *  single fill (no separate stroke ops) so the altitude color tint covers
+ *  the whole shape cleanly. */
 const ICON_PATHS: Record<IconTheme, string> = {
-  // Classic airliner top-view.
+  // Top-view airliner: nose up (north), tapered fuselage, swept wings,
+  // forward-swept horizontal stab. Less blocky than the old version.
   plane:
-    "M16 1 C15 1 14 2 14 4 L14 11 L3 18 L3 21 L14 17 L14 25 L10 28 L10 30 L16 28 L22 30 L22 28 L18 25 L18 17 L29 21 L29 18 L18 11 L18 4 C18 2 17 1 16 1 Z",
-  // Dog paw print (Madison's love).
+    "M32 4 C29 4 27.5 6 27.5 9 L27.5 22 L4 36 L4 40 L27.5 33 L27.5 47 L19 53 L19 56 L32 53 L45 56 L45 53 L36.5 47 L36.5 33 L60 40 L60 36 L36.5 22 L36.5 9 C36.5 6 35 4 32 4 Z",
+  // Paw print — central pad + four rounded toes. Cleaner geometry with
+  // proper ellipses so the toes don't look like blobs.
   paw:
-    "M16 16 C12 16 9 19 9 23 C9 26 12 29 16 29 C20 29 23 26 23 23 C23 19 20 16 16 16 Z " +
-    "M7 13 C5 13 4 11 4 9 C4 7 5 5 7 5 C9 5 10 7 10 9 C10 11 9 13 7 13 Z " +
-    "M25 13 C23 13 22 11 22 9 C22 7 23 5 25 5 C27 5 28 7 28 9 C28 11 27 13 25 13 Z " +
-    "M12 9 C10 9 9 7 9 5 C9 3 10 1 12 1 C14 1 15 3 15 5 C15 7 14 9 12 9 Z " +
-    "M20 9 C18 9 17 7 17 5 C17 3 18 1 20 1 C22 1 23 3 23 5 C23 7 22 9 20 9 Z",
-  // Heart (the Hobbit House dwellers).
+    "M32 30 C25 30 19 36 19 44 C19 51 25 56 32 56 C39 56 45 51 45 44 C45 36 39 30 32 30 Z " +
+    "M13 25 C9 25 6 21 6 16 C6 11 9 7 13 7 C17 7 20 11 20 16 C20 21 17 25 13 25 Z " +
+    "M51 25 C47 25 44 21 44 16 C44 11 47 7 51 7 C55 7 58 11 58 16 C58 21 55 25 51 25 Z " +
+    "M23 18 C20 18 17 15 17 11 C17 7 20 4 23 4 C26 4 29 7 29 11 C29 15 26 18 23 18 Z " +
+    "M41 18 C38 18 35 15 35 11 C35 7 38 4 41 4 C44 4 47 7 47 11 C47 15 44 18 41 18 Z",
+  // Heart — classic symmetric cardioid. Higher control points so the lobes
+  // are rounder and the point is sharper.
   heart:
-    "M16 28 C16 28 4 20 4 11 C4 6 8 3 12 3 C14 3 15 4 16 6 C17 4 18 3 20 3 C24 3 28 6 28 11 C28 20 16 28 16 28 Z",
-  // UFO — saucer with dome on top.
+    "M32 58 C28 54 8 42 8 23 C8 14 14 8 21 8 C25 8 29 10 32 14 C35 10 39 8 43 8 C50 8 56 14 56 23 C56 42 36 54 32 58 Z",
+  // UFO — flying saucer in profile: rounded dome, wide disc bulge, no
+  // separate beam (kept the silhouette readable at small sizes). Drawn as
+  // one closed path so the SDF fills cleanly.
   ufo:
-    "M16 6 C19 6 22 8 22 12 L23 13 L26 14 L28 16 L28 18 L4 18 L4 16 L6 14 L9 13 L10 12 C10 8 13 6 16 6 Z " +
-    "M11 19 C12 21 14 22 16 22 C18 22 20 21 21 19 Z " +
-    "M10 22 L9 25 M22 22 L23 25 M16 22 L16 26",
+    "M32 10 C24 10 18 14 18 21 L18 24 L10 26 C4 27 1 30 1 33 C1 36 6 38 14 39 C20 40 27 41 32 41 C37 41 44 40 50 39 C58 38 63 36 63 33 C63 30 60 27 54 26 L46 24 L46 21 C46 14 40 10 32 10 Z " +
+    "M28 16 C27 16 26 17 26 18 C26 19 27 20 28 20 C29 20 30 19 30 18 C30 17 29 16 28 16 Z " +
+    "M36 16 C35 16 34 17 34 18 C34 19 35 20 36 20 C37 20 38 19 38 18 C38 17 37 16 36 16 Z",
 };
 
 function makePlaneImage(kind: IconTheme = "plane"): { data: Uint8ClampedArray; width: number; height: number } {
-  const vb = 32;
+  const vb = 64;
   const scale = 4;
   const W = vb * scale;
   const canvas = document.createElement("canvas");
@@ -39,14 +47,10 @@ function makePlaneImage(kind: IconTheme = "plane"): { data: Uint8ClampedArray; w
   const ctx = canvas.getContext("2d")!;
   ctx.scale(scale, scale);
   ctx.fillStyle = "#ffffff";
-  ctx.strokeStyle = "#ffffff";
-  ctx.lineWidth = 1.5;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   const p = new Path2D(ICON_PATHS[kind]);
   ctx.fill(p);
-  // UFO has a couple of stroked beams — strokes contribute to SDF too.
-  if (kind === "ufo") ctx.stroke(p);
   return { data: ctx.getImageData(0, 0, W, W).data, width: W, height: W };
 }
 
@@ -183,6 +187,86 @@ export function MapView(): JSX.Element {
       } catch {
         /* layer shape differs on this basemap — skip */
       }
+    }
+
+    // Static major-airports layer for wide zoom. OpenMapTiles aeroway data
+    // doesn't exist below ~z11, so country/regional views were empty of any
+    // airport markers. We bundle ~150 hubs and render them as a circle +
+    // IATA label from z2; both fade out by z10 where the real runway
+    // geometry takes over.
+    if (!map.getSource("major-airports")) {
+      map.addSource("major-airports", {
+        type: "geojson",
+        data: {
+          type: "FeatureCollection",
+          features: MAJOR_AIRPORTS.map(([iata, icao, lat, lon, name]) => ({
+            type: "Feature" as const,
+            properties: { iata, icao, name },
+            geometry: { type: "Point" as const, coordinates: [lon, lat] },
+          })),
+        },
+      });
+    }
+    if (!map.getLayer("major-airport-dot")) {
+      map.addLayer({
+        id: "major-airport-dot",
+        type: "circle",
+        source: "major-airports",
+        minzoom: 2,
+        maxzoom: 10,
+        paint: {
+          "circle-color": "#A3C940",
+          "circle-stroke-color": runwayColor,
+          "circle-stroke-width": 1.2,
+          "circle-radius": [
+            "interpolate", ["linear"], ["zoom"],
+            2, 2,
+            5, 3.5,
+            8, 5,
+            10, 7,
+          ],
+          "circle-opacity": [
+            "interpolate", ["linear"], ["zoom"],
+            2, 0.95,
+            8, 0.9,
+            10, 0,
+          ],
+        },
+      });
+    }
+    if (!map.getLayer("major-airport-label")) {
+      map.addLayer({
+        id: "major-airport-label",
+        type: "symbol",
+        source: "major-airports",
+        minzoom: 4,
+        maxzoom: 10,
+        layout: {
+          "text-field": ["get", "iata"],
+          "text-font": ["Open Sans Bold", "Arial Unicode MS Bold", "Noto Sans Bold"],
+          "text-size": [
+            "interpolate", ["linear"], ["zoom"],
+            4, 9,
+            7, 11,
+            10, 13,
+          ],
+          "text-offset": [0, 1],
+          "text-anchor": "top",
+          "text-allow-overlap": false,
+        },
+        paint: {
+          "text-color": runwayColor,
+          "text-halo-color": col.halo,
+          "text-halo-width": 1.4,
+          "text-opacity": [
+            "interpolate", ["linear"], ["zoom"],
+            4, 0,
+            5, 0.9,
+            9, 0.9,
+            10, 0,
+          ],
+        },
+      });
     }
 
     // Coverage footprint: the farthest aircraft tracked per bearing.
@@ -427,6 +511,13 @@ export function MapView(): JSX.Element {
     });
     // Compass/pitch button removed — rotation is disabled, so it did nothing.
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+    // Re-center button: snaps the map back to receiver coords at the default
+    // area zoom. Sits with the zoom controls in the bottom-right cluster.
+    map.addControl(new RecenterControl(() => {
+      const cfg = useRadar.getState().config;
+      if (!cfg) return;
+      map.easeTo({ center: [cfg.receiver.lon, cfg.receiver.lat], zoom: 8, duration: 700 });
+    }), "bottom-right");
     map.touchZoomRotate.disableRotation();
     mapRef.current = map;
 
@@ -498,6 +589,13 @@ export function MapView(): JSX.Element {
     };
 
     if (!stormOverlay) { removeLayer(); return; }
+
+    // Auto-zoom out to the standard area view (z8) when the user enables
+    // storm radar at a closer zoom — RainViewer tiles only render to z9,
+    // and the rain pattern is meaningful at metro+ scale anyway.
+    if (map.getZoom() > 8.2) {
+      map.easeTo({ zoom: 8, duration: 600 });
+    }
 
     let alive = true;
     const apply = async () => {
@@ -575,4 +673,30 @@ export function MapView(): JSX.Element {
   }, [selectedHex]);
 
   return <div ref={containerRef} style={{ position: "absolute", inset: 0 }} />;
+}
+
+/** Custom MapLibre control that snaps the map back to the receiver center
+ *  at the standard area zoom. Renders inline with the zoom +/- buttons. */
+class RecenterControl {
+  private container: HTMLDivElement | null = null;
+  constructor(private onClick: () => void) {}
+  onAdd(): HTMLDivElement {
+    const c = document.createElement("div");
+    c.className = "maplibregl-ctrl maplibregl-ctrl-group";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.title = "Re-center on receiver";
+    btn.setAttribute("aria-label", "Re-center on receiver");
+    btn.style.fontSize = "16px";
+    btn.style.lineHeight = "1";
+    btn.textContent = "⌖";
+    btn.onclick = this.onClick;
+    c.appendChild(btn);
+    this.container = c;
+    return c;
+  }
+  onRemove(): void {
+    this.container?.parentNode?.removeChild(this.container);
+    this.container = null;
+  }
 }

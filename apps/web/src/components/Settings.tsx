@@ -607,6 +607,17 @@ function AdminSection({ pin }: { pin: string }): JSX.Element {
               Restart radar
             </button>
           </div>
+          <button className="btn" disabled={busy}
+                  onClick={async () => {
+                    setBusy(true); setMsg("");
+                    try {
+                      const r = await api.adminBackfillAchievements(pin);
+                      setMsg(r.ok ? `Backfilled ${r.fired} unlocks from ${r.processed} sightings ✓` : `Backfill failed: ${r.error}`);
+                      if (r.ok) setInfo(null);
+                    } finally { setBusy(false); }
+                  }}>
+            Backfill achievements from sightings
+          </button>
           <p className="muted" style={{ fontSize: 11, marginTop: 0 }}>
             Reset stats wipes the sightings/flagged/coverage/achievements tables (settings + WiFi profiles are kept).
             Pull update runs <code>git pull &amp;&amp; docker compose pull &amp;&amp; up -d</code> on the host.

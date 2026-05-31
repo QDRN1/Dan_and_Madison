@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import type { Stats } from "@qdrn/shared";
 import { api } from "../api";
 import { useRadar } from "../store";
@@ -17,7 +17,9 @@ export function StatsPanel(): JSX.Element {
     let alive = true;
     const load = () => api.stats().then((s) => alive && setStats(s)).catch(() => undefined);
     load();
-    const t = setInterval(load, 30_000);
+    // 60s refresh is plenty for the daily counters; 30s caused enough
+    // re-renders to look like the drawer was flickering.
+    const t = setInterval(load, 60_000);
     return () => { alive = false; clearInterval(t); };
   }, []);
 
@@ -54,14 +56,14 @@ export function StatsPanel(): JSX.Element {
   );
 }
 
-function Card({ label, value, onClick }: { label: string; value: string | number; onClick?: () => void }): JSX.Element {
+const Card = memo(function Card({ label, value, onClick }: { label: string; value: string | number; onClick?: () => void }): JSX.Element {
   return (
     <button className="stat-card stat-card-btn" onClick={onClick} type="button">
       <div className="stat-big">{value}</div>
       <div className="muted" style={{ fontSize: 12 }}>{label}</div>
     </button>
   );
-}
+});
 
 function Section({ title, rows }: { title: string; rows: [string, string][] }): JSX.Element {
   return (
