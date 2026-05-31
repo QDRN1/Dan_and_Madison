@@ -5,6 +5,7 @@ import {
   VRS_ROUTES_BASE,
   getApiKeys,
   getGatewayConfig,
+  isAdsblolEnabled,
   paidLookupsAllowed,
   recordAeroApiCall,
 } from "./config.js";
@@ -222,10 +223,16 @@ async function lookupRoute(
   // Free path. adsb.lol carries the full (often multi-stop) rotation, so we use
   // the aircraft's position to pick the leg it's actually flying — that beats a
   // single canonical leg for planes mid-rotation. adsbdb supplies the airline
-  // name/IATA (adsb.lol's route file only has the airline ICAO). hexdb is no
-  // longer used for routes: its records are frozen ~2018 and have no leg
-  // awareness, so it could only ever surface a stale, wrong-leg guess.
-  const [lol, adb] = await Promise.all([adsblolRoute(callsign, pos), adsbdbRoute(callsign)]);
+  // name/IATA (adsb.lol's route file only has the airline ICAO). The adsb.lol
+  // call is gated by `adsb.lol.enabled` (default true) so a user can disable
+  // it from Settings without unsetting their AeroAPI key. hexdb is no longer
+  // used for routes: its records are frozen ~2018 and have no leg awareness,
+  // so it could only ever surface a stale, wrong-leg guess.
+  const lolEnabled = isAdsblolEnabled();
+  const [lol, adb] = await Promise.all([
+    lolEnabled ? adsblolRoute(callsign, pos) : Promise.resolve(undefined),
+    adsbdbRoute(callsign),
+  ]);
   if (!lol) return adb;
   if (!adb) return lol;
   return {

@@ -1,42 +1,41 @@
 import { useEffect, useRef, useState } from "react";
 import type { SightingPage, SightingRow, SightingScope, SightingSort } from "@qdrn/shared";
 import { api } from "../api";
-import { useRadar } from "../store";
-
-export type PopoutKind = "in-view" | "sightings" | "farthest";
-
-interface Initial {
-  scope?: SightingScope;
-  sort?: SightingSort;
-  title?: string;
-}
+import { type PopoutKind, useRadar } from "../store";
 
 const PAGE_SIZE = 100;
 
 /** Full-screen popout listing sightings with scope/search/airline filters.
- *  Used by every stat card that opens a "big table" view. The "in-view" kind
- *  uses live aircraft from the store instead of the DB, so live position
- *  changes don't require a refetch. */
-export function SightingsPopout({
-  kind, initial, onClose,
-}: { kind: PopoutKind; initial?: Initial; onClose: () => void }): JSX.Element {
-  const live = useRadar((s) => s.aircraft);
+ *  Mounted at the root of RadarView so it escapes the drawer's clipping
+ *  transform. The drawer stays open behind it: "←" returns to the overview
+ *  sheet inside the drawer, "✕" closes the popout (drawer keeps its state). */
+export function SightingsPopout(): JSX.Element | null {
+  const popout = useRadar((s) => s.popout);
+  const close = useRadar((s) => s.closePopout);
   const select = useRadar((s) => s.select);
+  const live = useRadar((s) => s.aircraft);
 
-  const [scope, setScope] = useState<SightingScope>(initial?.scope ?? "today");
-  const [sort, setSort] = useState<SightingSort>(initial?.sort ?? (kind === "farthest" ? "farthest" : "recent"));
+  const [scope, setScope] = useState<SightingScope>(popout?.scope ?? "today");
+  const [sort, setSort] = useState<SightingSort>(popout?.sort ?? "recent");
   const [q, setQ] = useState("");
   const [airline, setAirline] = useState<string>("");
   const [page, setPage] = useState<SightingPage | null>(null);
   const [loading, setLoading] = useState(true);
   const [offset, setOffset] = useState(0);
 
-  // Reset offset whenever the filter combo changes — fresh result set.
-  useEffect(() => { setOffset(0); }, [scope, sort, q, airline, kind]);
+  // Reset filters whenever a new popout is opened.
+  useEffect(() => {
+    if (!popout) return;
+    setScope(popout.scope ?? "today");
+    setSort(popout.sort ?? (popout.kind === "farthest" ? "farthest" : "recent"));
+    setQ(""); setAirline(""); setOffset(0);
+  }, [popout]);
 
-  // Debounce the search so we don't hammer the DB on every keystroke.
+  useEffect(() => { setOffset(0); }, [scope, sort, q, airline]);
+
+  // Debounce search so we don't fire on every keystroke.
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [debouncedQ, setDebouncedQ] = useState(q);
+  const [debouncedQ, setDebouncedQ] = useState("");
   useEffect(() => {
     if (searchTimer.current) clearTimeout(searchTimer.current);
     searchTimer.current = setTimeout(() => setDebouncedQ(q.trim()), 200);
@@ -44,14 +43,10 @@ export function SightingsPopout({
   }, [q]);
 
   useEffect(() => {
-    if (kind === "in-view") {
-      // Reuse the page shape so the table doesn't care where rows came from.
+    if (!popout) return;
+    if (popout.kind === "in-view") {
       const filtered = applyClientFilters(live, debouncedQ, airline, sort);
-      setPage({
-        rows: filtered.rows,
-        total: filtered.total,
-        airlines: filtered.airlines,
-      });
+      setPage(filtered);
       setLoading(false);
       return;
     }
@@ -62,34 +57,34 @@ export function SightingsPopout({
       .catch(() => undefined)
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [kind, scope, sort, debouncedQ, airline, offset, live]);
+  }, [popout, scope, sort, debouncedQ, airline, offset, live]);
 
   // Esc to close.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    if (!popout) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [popout, close]);
 
-  const title = initial?.title ?? (
-    kind === "in-view" ? "In view now" :
-    kind === "farthest" ? "Farthest tracked" :
-    "Sightings"
-  );
+  if (!popout) return null;
+
+  const title = popout.title ?? defaultTitle(popout.kind);
 
   return (
-    <div className="popout-backdrop" onClick={onClose}>
+    <div className="popout-backdrop" onClick={close}>
       <div className="popout" onClick={(e) => e.stopPropagation()}>
         <header className="popout-head">
+          <button className="iconbtn" onClick={close} aria-label="Back" title="Back">←</button>
           <div className="popout-title">
             {title}
             {page && <span className="muted popout-count"> · {page.total.toLocaleString()}</span>}
           </div>
-          <button className="iconbtn" onClick={onClose} aria-label="Close">✕</button>
+          <button className="iconbtn" onClick={close} aria-label="Close" title="Close">✕</button>
         </header>
 
         <div className="popout-filters">
-          {kind !== "in-view" && (
+          {popout.kind !== "in-view" && (
             <div className="popout-scope-tabs" role="tablist">
               {(["today", "week", "month", "all"] as const).map((s) => (
                 <button
@@ -114,21 +109,13 @@ export function SightingsPopout({
               autoCorrect="off"
               spellCheck={false}
             />
-            <select
-              className="input"
-              value={airline}
-              onChange={(e) => setAirline(e.target.value)}
-            >
+            <select className="input" value={airline} onChange={(e) => setAirline(e.target.value)}>
               <option value="">All airlines</option>
               {page?.airlines.map((a) => (
                 <option key={a.name} value={a.name}>{a.name} ({a.count})</option>
               ))}
             </select>
-            <select
-              className="input"
-              value={sort}
-              onChange={(e) => setSort(e.target.value as SightingSort)}
-            >
+            <select className="input" value={sort} onChange={(e) => setSort(e.target.value as SightingSort)}>
               <option value="recent">Last seen</option>
               <option value="farthest">Farthest</option>
               <option value="first">First seen</option>
@@ -155,7 +142,7 @@ export function SightingsPopout({
               </thead>
               <tbody>
                 {page.rows.map((r) => (
-                  <tr key={`${r.hex}-${r.lastSeen ?? r.firstSeen ?? ""}`} onClick={() => { select(r.hex); onClose(); }}>
+                  <tr key={`${r.hex}-${r.lastSeen ?? r.firstSeen ?? ""}`} onClick={() => { select(r.hex); close(); }}>
                     <td><strong>{r.flight?.trim() || r.hex.toUpperCase()}</strong></td>
                     <td>{r.typeName ?? r.typeCode ?? "—"}</td>
                     <td className="ellipsis">{r.operator ?? "—"}</td>
@@ -169,7 +156,7 @@ export function SightingsPopout({
           )}
         </div>
 
-        {kind !== "in-view" && page && page.total > PAGE_SIZE && (
+        {popout.kind !== "in-view" && page && page.total > PAGE_SIZE && (
           <footer className="popout-foot">
             <button className="btn" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}>← Prev</button>
             <span className="muted" style={{ fontSize: 12 }}>
@@ -183,6 +170,10 @@ export function SightingsPopout({
   );
 }
 
+function defaultTitle(kind: PopoutKind): string {
+  return kind === "in-view" ? "In view now" : kind === "farthest" ? "Farthest tracked" : "Sightings";
+}
+
 function routeLabel(r: SightingRow): string {
   if (r.originIcao && r.destIcao) return `${r.originIcao} → ${r.destIcao}`;
   if (r.originIcao)               return `${r.originIcao} →`;
@@ -190,14 +181,13 @@ function routeLabel(r: SightingRow): string {
   return "—";
 }
 
-/** Mirror the server-side filter shape for the "in-view" (live) source so the
- *  same table+filters work for live aircraft without an extra round-trip. */
+/** Mirror the server-side filter for the "in-view" live source. */
 function applyClientFilters(
   live: { hex: string; flight?: string; distNm?: number; enrichment?: { typeCode?: string; typeName?: string; operator?: string; operatorIcao?: string; route?: { origin?: { icao?: string; iata?: string }; destination?: { icao?: string; iata?: string } } } }[],
   q: string,
   airline: string,
   sort: SightingSort,
-): { rows: SightingRow[]; total: number; airlines: { name: string; count: number }[] } {
+): SightingPage {
   const rowsAll: SightingRow[] = live.map((a) => ({
     hex: a.hex,
     flight: a.flight,

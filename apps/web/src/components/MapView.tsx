@@ -120,21 +120,22 @@ export function MapView(): JSX.Element {
     if (map.hasImage("plane")) map.removeImage("plane");
     map.addImage("plane", makePlaneImage(icon), { sdf: true, pixelRatio: 4 });
 
-    // Surface airport runways/taxiways earlier (the basemap hides them until you
-    // zoom way in) so airfields are recognizable from a wider view.
+    // Surface airport runways/taxiways earlier (the basemap hides them until
+    // you zoom way in) and make runways bold enough to read at wide zoom so
+    // major airports are recognizable as "airport-shaped" from out-of-state.
     for (const id of ["aeroway-runway", "aeroway-taxiway"]) {
       if (!map.getLayer(id)) continue;
       try {
-        map.setLayerZoomRange(id, 9, 24);
-        map.setPaintProperty(id, "line-opacity", id === "aeroway-runway" ? 0.9 : 0.6);
+        map.setLayerZoomRange(id, id === "aeroway-runway" ? 6 : 9, 24);
+        map.setPaintProperty(id, "line-opacity", id === "aeroway-runway" ? 1 : 0.6);
         map.setPaintProperty(id, "line-width", [
           "interpolate",
           ["linear"],
           ["zoom"],
-          9,
-          id === "aeroway-runway" ? 1.2 : 0.5,
-          14,
-          id === "aeroway-runway" ? 6 : 2.5,
+          6,  id === "aeroway-runway" ? 1.8 : 0.4,
+          9,  id === "aeroway-runway" ? 3   : 0.6,
+          12, id === "aeroway-runway" ? 5   : 1.5,
+          14, id === "aeroway-runway" ? 7   : 2.5,
         ]);
         if (id === "aeroway-runway") map.setPaintProperty(id, "line-color", col.label);
       } catch {
@@ -432,13 +433,11 @@ export function MapView(): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [iconTheme]);
 
-  // Storm radar overlay (RainViewer). Fetch the latest frame timestamp, add
-  // a raster layer beneath the planes; refresh every 10 min while on.
-  // RainViewer's tiles top out around z9 — past that they're blank/blurry and
-  // make the map look broken. We fade the layer out between z8.5 and z11 so
-  // the rain is visible at metro zoom and silently disappears when you're
-  // street-level. Source `maxzoom: 8` lets MapLibre over-zoom existing tiles
-  // rather than request blank ones.
+  // Storm radar overlay (RainViewer). RainViewer serves a literal
+  // "Zoom Level Not Supported" placeholder PNG above their tile cap, which
+  // bled through earlier opacity fades. Hard-cut the layer at z9 (above
+  // metro zoom it just vanishes), and cap the source at z7 so MapLibre
+  // doesn't even request the bad tiles.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !readyRef.current) return;
@@ -463,7 +462,7 @@ export function MapView(): JSX.Element {
           type: "raster",
           tiles: [`https://tilecache.rainviewer.com${last.path}/256/{z}/{x}/{y}/2/1_1.png`],
           tileSize: 256,
-          maxzoom: 8,
+          maxzoom: 7,
           attribution: "Radar © RainViewer",
         });
         const before = map.getLayer("ac-highlight") ? "ac-highlight" : undefined;
@@ -471,15 +470,8 @@ export function MapView(): JSX.Element {
           id: "storm",
           type: "raster",
           source: "storm",
-          maxzoom: 11,
-          paint: {
-            "raster-opacity": [
-              "interpolate", ["linear"], ["zoom"],
-              0, 0.55,
-              8.5, 0.55,
-              11, 0,
-            ],
-          },
+          maxzoom: 9,
+          paint: { "raster-opacity": 0.55 },
         }, before);
       } catch { /* offline / blocked — silently skip */ }
     };

@@ -1,8 +1,21 @@
 import { create } from "zustand";
-import type { Aircraft, LiveSnapshot, PublicConfig, TrailPoint } from "@qdrn/shared";
+import type { Aircraft, LiveSnapshot, PublicConfig, SightingScope, SightingSort, TrailPoint } from "@qdrn/shared";
 
 export type Theme = "light" | "dark";
 export type IconTheme = "plane" | "paw" | "heart" | "ufo";
+
+export type PopoutKind = "in-view" | "sightings" | "farthest";
+
+/** When the user drills into a stat card we open a full-screen popout. State
+ *  lives in the store so the popout mounts at the root of RadarView (outside
+ *  the drawer's transformed bounds) and `onBack` returns to whichever drawer
+ *  view spawned it. */
+export interface PopoutState {
+  kind: PopoutKind;
+  scope?: SightingScope;
+  sort?: SightingSort;
+  title?: string;
+}
 
 function initialTheme(): Theme {
   try {
@@ -39,6 +52,7 @@ interface RadarState {
   theme: Theme;
   iconTheme: IconTheme;
   stormOverlay: boolean;
+  popout: PopoutState | null;
   setConfig: (c: PublicConfig) => void;
   applySnapshot: (s: LiveSnapshot) => void;
   select: (hex: string | null) => void;
@@ -47,6 +61,8 @@ interface RadarState {
   toggleTheme: () => void;
   setIconTheme: (t: IconTheme) => void;
   toggleStorm: () => void;
+  openPopout: (p: PopoutState) => void;
+  closePopout: () => void;
   selected: () => Aircraft | null;
 }
 
@@ -61,6 +77,7 @@ export const useRadar = create<RadarState>((set, get) => ({
   theme: initialTheme(),
   iconTheme: initialIconTheme(),
   stormOverlay: initialStorm(),
+  popout: null,
 
   setConfig: (config) => set({ config }),
 
@@ -83,6 +100,8 @@ export const useRadar = create<RadarState>((set, get) => ({
     try { localStorage.setItem("qdrn-storm", next ? "1" : "0"); } catch { /* ignore */ }
     return { stormOverlay: next };
   }),
+  openPopout: (popout) => set({ popout }),
+  closePopout: () => set({ popout: null }),
   selected: () => {
     const { selectedHex, byHex } = get();
     return selectedHex ? byHex[selectedHex] ?? null : null;

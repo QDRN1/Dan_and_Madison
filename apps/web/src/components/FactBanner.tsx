@@ -85,17 +85,62 @@ const FACTS: string[] = [
   "Pilots refer to the typing motion of pressing many buttons in sequence as 'twiddling'.",
 ];
 
-function pickIndex(): number {
-  // Days since 1970, mod facts length — gives the same fact for the whole day.
-  return Math.floor(Date.now() / 86400000) % FACTS.length;
+const SEEN_KEY = "qdrn-facts-seen";
+
+/** localStorage-backed set of fact indices the user has clicked past. Once
+ *  every fact has been seen we wipe the set so the rotation can start over —
+ *  better than silently showing nothing. */
+function loadSeen(): Set<number> {
+  try {
+    const raw = localStorage.getItem(SEEN_KEY);
+    if (!raw) return new Set();
+    return new Set(JSON.parse(raw) as number[]);
+  } catch { return new Set(); }
+}
+function saveSeen(seen: Set<number>): void {
+  try { localStorage.setItem(SEEN_KEY, JSON.stringify([...seen])); } catch { /* ignore */ }
+}
+
+/** Pick today's fact. Day-of-year decides the seed, but we walk forward from
+ *  that seed skipping any indices the user has already clicked past. */
+function pickIndex(seen: Set<number>): number {
+  if (seen.size >= FACTS.length) seen.clear();
+  const start = Math.floor(Date.now() / 86400000) % FACTS.length;
+  for (let step = 0; step < FACTS.length; step++) {
+    const idx = (start + step) % FACTS.length;
+    if (!seen.has(idx)) return idx;
+  }
+  return start;
 }
 
 export function FactBanner(): JSX.Element {
-  const [i, setI] = useState<number>(pickIndex);
+  const [seen, setSeen] = useState<Set<number>>(loadSeen);
+  const [i, setI] = useState<number>(() => pickIndex(loadSeen()));
+
+  const next = (): void => {
+    setSeen((cur) => {
+      const updated = new Set(cur);
+      updated.add(i);
+      if (updated.size >= FACTS.length) updated.clear();
+      saveSeen(updated);
+      // Compute the next index against the updated seen set.
+      let idx = (i + 1) % FACTS.length;
+      for (let step = 0; step < FACTS.length; step++) {
+        if (!updated.has(idx)) { setI(idx); break; }
+        idx = (idx + 1) % FACTS.length;
+      }
+      return updated;
+    });
+  };
+
+  // Keep `seen` referenced so the linter doesn't drop it from deps — also
+  // useful when we add a "reset" affordance later.
+  void seen;
+
   return (
     <button
       className="fact-banner"
-      onClick={() => setI((cur) => (cur + 1) % FACTS.length)}
+      onClick={next}
       title="Tap for another fact"
     >
       <span className="fact-pip">💡</span>

@@ -65,6 +65,8 @@ export const api = {
   connections: (pin: string, force?: boolean) => post<Connections>("/setup/connections", { pin, force }),
   saveGateway: (pin: string, url: string, key: string) =>
     post<{ ok: boolean; gateway: { url: string; key: string } }>("/setup/gateway", { pin, url, key }),
+  saveAdsblol: (pin: string, enabled: boolean) =>
+    post<{ ok: boolean; enabled: boolean }>("/setup/adsblol", { pin, enabled }),
   wifiList: (pin: string) =>
     post<{ ok: boolean; networks?: WifiNetwork[]; error?: string }>("/setup/wifi", { pin }),
   wifiAdd: (pin: string, ssid: string, password: string, priority: number) =>

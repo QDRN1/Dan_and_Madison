@@ -162,6 +162,9 @@ export function Settings(): JSX.Element {
       {/* Shared API gateway */}
       <GatewaySection pin={pin} gateway={s.gateway} status={conn?.gateway} info={conn?.gatewayInfo} onSaved={() => void load(pin)} />
 
+      {/* adsb.lol — free position-aware route source */}
+      <AdsblolSection pin={pin} enabled={s.adsblolEnabled} status={conn?.adsblol} onChanged={() => void load(pin)} />
+
       {/* AeroAPI usage + spend guard (direct mode; the gateway meters its own) */}
       {!(s.gateway.url && s.gateway.key) && <AeroSection pin={pin} aero={s.aero} onChanged={() => void load(pin)} />}
 
@@ -174,21 +177,36 @@ export function Settings(): JSX.Element {
 function NameEditor({ pin, initial, onSaved }: { pin: string; initial: string; onSaved: () => void }): JSX.Element {
   const [name, setName] = useState(initial);
   const [saved, setSaved] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   return (
-    <div>
-      <div className="label" style={{ marginTop: 0 }}>Pilot name</div>
-      <div style={{ display: "flex", gap: 8 }}>
-        <input
-          className="input"
-          placeholder="e.g. Collin (blank → “Hello Pilot!”)"
-          value={name}
-          maxLength={40}
-          onChange={(e) => { setName(e.target.value); setSaved(false); }}
-        />
-        <button className="btn" onClick={async () => { await api.saveName(pin, name); setSaved(true); onSaved(); }}>
-          {saved ? "Saved ✓" : "Save"}
-        </button>
-      </div>
+    <div className="set-card">
+      <button
+        className="set-collapse-head"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+      >
+        <span style={{ flex: 1, textAlign: "left", fontWeight: 700, fontSize: 13, letterSpacing: 0.3, textTransform: "uppercase", color: "var(--muted)" }}>
+          Pilot name
+        </span>
+        <span className="muted" style={{ fontSize: 12, marginRight: 8, maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {initial?.trim() || "—"}
+        </span>
+        <span className="set-collapse-chev" style={{ transform: expanded ? "rotate(90deg)" : "none" }}>›</span>
+      </button>
+      {expanded && (
+        <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
+          <input
+            className="input"
+            placeholder="e.g. Collin (blank → “Hello Pilot!”)"
+            value={name}
+            maxLength={40}
+            onChange={(e) => { setName(e.target.value); setSaved(false); }}
+          />
+          <button className="btn" onClick={async () => { await api.saveName(pin, name); setSaved(true); onSaved(); }}>
+            {saved ? "Saved ✓" : "Save"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -354,6 +372,67 @@ function SignalBars({ signal }: { signal?: number }): JSX.Element {
   );
 }
 
+const ADSB_STATUS: Record<ConnStatus, { cls: string; label: string }> = {
+  ok: { cls: "on", label: "reachable" },
+  blocked: { cls: "warn", label: "blocked" },
+  invalid: { cls: "bad", label: "invalid" },
+  down: { cls: "bad", label: "unreachable" },
+  error: { cls: "warn", label: "error" },
+  unknown: { cls: "warn", label: "unknown" },
+  unset: { cls: "", label: "off" },
+};
+
+function AdsblolSection({
+  pin, enabled, status, onChanged,
+}: {
+  pin: string;
+  enabled: boolean;
+  status: ConnStatus | undefined;
+  onChanged: () => void;
+}): JSX.Element {
+  const [expanded, setExpanded] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const st = ADSB_STATUS[status ?? (enabled ? "unknown" : "unset")];
+  const onToggle = async (): Promise<void> => {
+    setBusy(true);
+    try { await api.saveAdsblol(pin, !enabled); onChanged(); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="set-card">
+      <button
+        className="set-collapse-head"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+      >
+        <span style={{ flex: 1, textAlign: "left", fontWeight: 700, fontSize: 13, letterSpacing: 0.3, textTransform: "uppercase", color: "var(--muted)" }}>
+          adsb.lol routes
+        </span>
+        <span className={`set-pill ${st.cls}`} style={{ width: "auto", padding: "3px 10px", gap: 7, marginRight: 6 }}>
+          <span className="dot" /> {st.label}
+        </span>
+        <span className="set-collapse-chev" style={{ transform: expanded ? "rotate(90deg)" : "none" }}>›</span>
+      </button>
+      {expanded && (
+        <div style={{ marginTop: 10 }}>
+          <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
+            Free position-aware route source — picks the leg the plane is
+            actually flying when a callsign has a multi-stop rotation. Disable
+            only if you're routing all lookups through AeroAPI.
+          </p>
+          <button
+            className="btn btn-block"
+            disabled={busy}
+            onClick={() => void onToggle()}
+          >
+            {busy ? "Saving…" : enabled ? "Disable adsb.lol" : "Enable adsb.lol"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const ICON_CHOICES: { id: IconTheme; emoji: string; label: string; sub: string }[] = [
   { id: "plane", emoji: "✈️", label: "Classic", sub: "The airliner you know." },
   { id: "paw",   emoji: "🐾", label: "Paw prints", sub: "For Madison." },
@@ -493,6 +572,7 @@ function WifiSection({ pin }: { pin: string }): JSX.Element {
   const [addOpen, setAddOpen] = useState(false);
   const [addSsid, setAddSsid] = useState("");
   const [addPw, setAddPw] = useState("");
+  const [expanded, setExpanded] = useState(false);
 
   async function refresh(): Promise<void> {
     setLoading(true); setErr("");
@@ -570,10 +650,26 @@ function WifiSection({ pin }: { pin: string }): JSX.Element {
     } finally { setBusy(false); }
   }
 
+  const active = nets?.find((n) => n.active)?.name;
+
   return (
     <div className="set-card">
-      <div className="label" style={{ marginTop: 0, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span>WiFi networks</span>
+      <button
+        className="set-collapse-head"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+      >
+        <span style={{ flex: 1, textAlign: "left", fontWeight: 700, fontSize: 13, letterSpacing: 0.3, textTransform: "uppercase", color: "var(--muted)" }}>
+          WiFi networks
+        </span>
+        <span className="muted" style={{ fontSize: 12, marginRight: 8, maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {active ?? (nets ? `${nets.length} saved` : "…")}
+        </span>
+        <span className="set-collapse-chev" style={{ transform: expanded ? "rotate(90deg)" : "none" }}>›</span>
+      </button>
+      {!expanded ? null : (
+      <div style={{ marginTop: 10 }}>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
         <button className="btn" style={{ padding: "4px 10px", fontSize: 12 }} disabled={loading} onClick={() => void refresh()}>
           {loading ? "…" : "Refresh"}
         </button>
@@ -690,38 +786,56 @@ function WifiSection({ pin }: { pin: string }): JSX.Element {
       )}
 
       {msg && <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>{msg}</div>}
+      </div>
+      )}
     </div>
   );
 }
 
 function AeroSection({ pin, aero, onChanged }: { pin: string; aero: AdminSettings["aero"]; onChanged: () => void }): JSX.Element {
   const [cap, setCap] = useState("");
+  const [expanded, setExpanded] = useState(false);
   const pct = aero.cap > 0 ? Math.min(100, Math.round((aero.used / aero.cap) * 100)) : 100;
   const over = aero.cap > 0 && aero.used >= aero.cap;
+  const status = !aero.keyPresent ? "no key" : aero.enabled ? `${aero.used}${aero.cap ? `/${aero.cap}` : ""}` : "off";
   return (
     <div className="set-card">
-      <div className="label" style={{ marginTop: 0 }}>AeroAPI usage</div>
-      {!aero.keyPresent && <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>No FlightAware key — routes use free sources only.</div>}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-        <div className="muted" style={{ fontSize: 13 }}>
-          {aero.used} used in {aero.month}{aero.cap > 0 ? ` · cap ${aero.cap}` : " · no cap"}
+      <button
+        className="set-collapse-head"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+      >
+        <span style={{ flex: 1, textAlign: "left", fontWeight: 700, fontSize: 13, letterSpacing: 0.3, textTransform: "uppercase", color: "var(--muted)" }}>
+          AeroAPI usage
+        </span>
+        <span className="muted" style={{ fontSize: 12, marginRight: 8 }}>{status}</span>
+        <span className="set-collapse-chev" style={{ transform: expanded ? "rotate(90deg)" : "none" }}>›</span>
+      </button>
+      {expanded && (
+        <div style={{ marginTop: 10 }}>
+          {!aero.keyPresent && <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>No FlightAware key — routes use free sources only.</div>}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+            <div className="muted" style={{ fontSize: 13 }}>
+              {aero.used} used in {aero.month}{aero.cap > 0 ? ` · cap ${aero.cap}` : " · no cap"}
+            </div>
+            <button className="btn" style={{ padding: "6px 12px", whiteSpace: "nowrap" }}
+              onClick={async () => { await api.saveAero(pin, { enabled: !aero.enabled }); onChanged(); }}>
+              {aero.enabled ? "Disable (free only)" : "Enable"}
+            </button>
+          </div>
+          <div style={{ height: 6, margin: "10px 0", borderRadius: 3, background: "rgba(128,128,128,0.22)", overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${pct}%`, borderRadius: 3, background: over ? "var(--danger)" : "var(--accent)" }} />
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input className="input" inputMode="numeric" placeholder={`cap (${aero.cap || "0 = unlimited"})`} value={cap}
+              onChange={(e) => setCap(e.target.value.replace(/\D/g, "").slice(0, 6))} />
+            <button className="btn" onClick={async () => { await api.saveAero(pin, { cap: Number(cap || aero.cap) }); setCap(""); onChanged(); }}>Set cap</button>
+          </div>
+          <p className="muted" style={{ fontSize: 12, marginBottom: 0 }}>
+            Free tier is ~$5/month of credit (more for ADS-B feeders). Past the cap, routes fall back to free sources.
+          </p>
         </div>
-        <button className="btn" style={{ padding: "6px 12px", whiteSpace: "nowrap" }}
-          onClick={async () => { await api.saveAero(pin, { enabled: !aero.enabled }); onChanged(); }}>
-          {aero.enabled ? "Disable (free only)" : "Enable"}
-        </button>
-      </div>
-      <div style={{ height: 6, margin: "10px 0", borderRadius: 3, background: "rgba(128,128,128,0.22)", overflow: "hidden" }}>
-        <div style={{ height: "100%", width: `${pct}%`, borderRadius: 3, background: over ? "var(--danger)" : "var(--accent)" }} />
-      </div>
-      <div style={{ display: "flex", gap: 8 }}>
-        <input className="input" inputMode="numeric" placeholder={`cap (${aero.cap || "0 = unlimited"})`} value={cap}
-          onChange={(e) => setCap(e.target.value.replace(/\D/g, "").slice(0, 6))} />
-        <button className="btn" onClick={async () => { await api.saveAero(pin, { cap: Number(cap || aero.cap) }); setCap(""); onChanged(); }}>Set cap</button>
-      </div>
-      <p className="muted" style={{ fontSize: 12, marginBottom: 0 }}>
-        Free tier is ~$5/month of credit (more for ADS-B feeders). Past the cap, routes fall back to free sources.
-      </p>
+      )}
     </div>
   );
 }

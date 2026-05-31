@@ -87,6 +87,7 @@ const SETTING_KEYS = {
   gatewayKey: "gateway.key",
   homeWifiFirstAt: "homeWifi.firstAt",
   homeWifiName: "homeWifi.name",
+  adsblolEnabled: "adsb.lol.enabled",
 } as const;
 
 export function getReceiver(): ReceiverInfo {
@@ -279,4 +280,17 @@ export function getHomeWifi(): { name: string; firstAt: number } | null {
   const name = getSetting(SETTING_KEYS.homeWifiName);
   if (!at || !name) return null;
   return { name, firstAt: Number(at) };
+}
+
+/** adsb.lol is the free position-aware route source. ON by default — it's the
+ *  only reliable free route resolver we have. Disabling it leaves AeroAPI (if
+ *  enabled) and adsbdb's single-leg routes as the fallback. */
+export function isAdsblolEnabled(): boolean {
+  const raw = getSetting(SETTING_KEYS.adsblolEnabled);
+  if (raw == null) return env("ADSBLOL_ENABLED", "true") !== "false";
+  return raw === "true";
+}
+
+export function setAdsblolEnabled(enabled: boolean): void {
+  setSetting(SETTING_KEYS.adsblolEnabled, String(enabled));
 }

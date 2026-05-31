@@ -288,6 +288,8 @@ export interface Connections {
   piawareFeederId: ConnStatus;
   gateway: ConnStatus;
   gatewayInfo?: GatewayInfo;
+  /** Free position-aware route source (adsb.lol). */
+  adsblol: ConnStatus;
 }
 
 /** Public, friend-facing config + setup state. */
@@ -314,6 +316,8 @@ export interface AdminSettings {
   aero: AeroApiStatus;
   /** Shared API gateway (ops.qdrn.io) this device routes paid lookups through. */
   gateway: { url: string; key: string };
+  /** Whether the free adsb.lol route source is currently active. */
+  adsblolEnabled: boolean;
 }
 
 export interface BrandConfig {

@@ -80,6 +80,7 @@ const opCountAllStmt = db.prepare(
   "SELECT COUNT(DISTINCT operator) n FROM sightings WHERE operator IS NOT NULL AND operator != ''",
 );
 const seenAlreadyStmt = db.prepare("SELECT 1 FROM sightings WHERE hex = ? LIMIT 1");
+const seenTodayStmt = db.prepare("SELECT 1 FROM sightings WHERE hex = ? AND day = ? LIMIT 1");
 
 export function recordSighting(ac: Aircraft): void {
   try {
@@ -89,7 +90,11 @@ export function recordSighting(ac: Aircraft): void {
     // "100 in a day" trigger on the crossing edge, not after the upsert.
     const todayUniqueBefore = (countTodayStmt.get(day) as { n: number }).n;
     const allTimeUniqueBefore = (countAllTimeStmt.get() as { n: number }).n;
-    const wasSeenBefore = Boolean(seenAlreadyStmt.get(ac.hex));
+    // Two checks: was this hex ever seen (for all-time delta), and was it
+    // seen TODAY already (for today delta). Conflating the two means a hex
+    // seen yesterday but first-of-the-day today never triggers `first_today`.
+    const wasSeenEver = Boolean(seenAlreadyStmt.get(ac.hex));
+    const wasSeenToday = Boolean(seenTodayStmt.get(ac.hex, day));
 
     const route = e?.route;
     const originIcao = route?.origin?.icao ?? route?.origin?.iata ?? null;
@@ -108,10 +113,10 @@ export function recordSighting(ac: Aircraft): void {
       dist: ac.distNm ?? 0,
     } as any);
 
-    // Approximate the "would this become a new unique?" delta. Used by the
-    // achievement context so milestone checks fire on the crossing edge.
-    const todayUniqueAfter = wasSeenBefore ? todayUniqueBefore : todayUniqueBefore + 1;
-    const allTimeUniqueAfter = wasSeenBefore ? allTimeUniqueBefore : allTimeUniqueBefore + 1;
+    // "Would this become a new unique?" delta. Today and all-time count
+    // crossings independently so milestone predicates fire on the right edge.
+    const todayUniqueAfter = wasSeenToday ? todayUniqueBefore : todayUniqueBefore + 1;
+    const allTimeUniqueAfter = wasSeenEver ? allTimeUniqueBefore : allTimeUniqueBefore + 1;
 
     checkAchievements({
       ac,

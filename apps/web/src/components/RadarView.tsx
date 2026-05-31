@@ -10,6 +10,7 @@ import { FlightList } from "./FlightList";
 import { StatsPanel } from "./StatsPanel";
 import { SeasonalOverlay } from "./SeasonalOverlay";
 import { Settings } from "./Settings";
+import { SightingsPopout } from "./SightingsPopout";
 import { ThemeToggle } from "./ThemeToggle";
 import { Toasts } from "./Toasts";
 
@@ -95,6 +96,7 @@ export function RadarView(): JSX.Element {
       <FactBanner />
       <SeasonalOverlay />
       <Toasts />
+      <SightingsPopout />
     </div>
   );
 }

@@ -42,8 +42,10 @@ import {
   getPilotName,
   getReceiver,
   getSetupPin,
+  isAdsblolEnabled,
   isPinSet,
   noteHomeWifi,
+  setAdsblolEnabled,
   setAeroApiConfig,
   setApiKey,
   setGatewayConfig,
@@ -244,8 +246,19 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
       },
       aero: aeroStatus(),
       gateway: getGatewayConfig(),
+      adsblolEnabled: isAdsblolEnabled(),
     };
     return settings;
+  });
+
+  app.post<{ Body: { pin?: string; enabled?: boolean } }>("/setup/adsblol", async (req, reply) => {
+    if (!pinOk(req.body?.pin)) return reply.code(401).send({ error: "bad_pin" });
+    if (typeof req.body?.enabled !== "boolean") return reply.code(400).send({ error: "bad_request" });
+    setAdsblolEnabled(req.body.enabled);
+    // Wipe the route cache so the next enrichment pass reflects the new source mix.
+    clearEnrichmentCache();
+    store.resetEnrichment();
+    return { ok: true, enabled: isAdsblolEnabled() };
   });
 
   app.post<{ Body: { pin?: string; url?: string; key?: string } }>("/setup/gateway", async (req, reply) => {
