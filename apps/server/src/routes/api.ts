@@ -60,7 +60,7 @@ import { getConnections } from "../connections.js";
 import { getCoverage } from "../coverage.js";
 import { clearEnrichmentCache, enrich } from "../enrichment.js";
 import { adminResetStats, getDeviceInfo } from "../admin.js";
-import { backfillAchievements } from "../achievements.js";
+import { backfillAchievements, diagnoseAchievements } from "../achievements.js";
 import { deriveFreeRouteTimes } from "../derived-times.js";
 import { fetchExtendedTrack } from "../extended-track.js";
 import { applyFeedersInBackground, writeFeederEnv } from "../feeder.js";
@@ -330,6 +330,11 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
     } catch (e) {
       return { ok: false as const, error: (e as Error).message };
     }
+  });
+
+  app.post<{ Body: { pin?: string } }>("/admin/diagnose-achievements", async (req, reply) => {
+    if (!adminPinOk(req.body?.pin)) return reply.code(401).send({ error: "owner_required" });
+    return diagnoseAchievements();
   });
 
   app.post<{ Body: { pin?: string } }>("/admin/restart", async (req, reply) => {

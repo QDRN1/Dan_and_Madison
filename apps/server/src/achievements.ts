@@ -207,9 +207,16 @@ const DEFS: (AchievementDef & {
 // ─── Persistence ────────────────────────────────────────────────────────────
 
 const getStmt = db.prepare<[string]>("SELECT count, first_at, last_at FROM achievements WHERE id = ?");
-const incStmt = db.prepare<[number, string]>(
-  `INSERT INTO achievements (id, count, first_at, last_at) VALUES (?2, 1, ?1, ?1)
-   ON CONFLICT(id) DO UPDATE SET count = count + 1, last_at = ?1`,
+// Named parameters here are deliberate. The previous version used
+// `VALUES (?2, 1, ?1, ?1)` with positional `?N` markers — better-sqlite3
+// silently rejected the out-of-order layout and every checkAll() iteration
+// raised, so 2,347 sightings produced exactly 0 unlocks. Named binds remove
+// the ambiguity completely.
+const incStmt = db.prepare(
+  `INSERT INTO achievements (id, count, first_at, last_at)
+   VALUES (@id, 1, @ts, @ts)
+   ON CONFLICT(id) DO UPDATE SET count = count + 1, last_at = @ts,
+                                 first_at = COALESCE(first_at, @ts)`,
 );
 const seedStmt = db.prepare<[string]>(
   `INSERT INTO achievements (id, count) VALUES (?, 0) ON CONFLICT(id) DO NOTHING`,
@@ -245,7 +252,7 @@ export function checkAll(ctx: Ctx): void {
     try {
       const cur = getCount(def.id);
       if (def.once && cur >= 1) continue;
-      if (def.test(ctx, cur)) incStmt.run(now, def.id);
+      if (def.test(ctx, cur)) incStmt.run({ id: def.id, ts: now });
     } catch (e) {
       console.error(`[achievements] ${def.id} threw:`, (e as Error).message);
     }
@@ -308,6 +315,37 @@ export function backfillAchievements(): { processed: number; fired: number } {
   const afterTotal = (db.prepare("SELECT COALESCE(SUM(count), 0) n FROM achievements").get() as { n: number }).n;
   fired = Math.max(0, afterTotal - beforeTotal);
   return { processed: rows.length, fired };
+}
+
+/** End-to-end probe of the achievement persistence path. Returns the table
+ *  shape, the seeded row count, and the result of directly trying to fire
+ *  `first_sighting` through incStmt. Lets us pinpoint where the chain breaks
+ *  without grepping container logs. */
+export function diagnoseAchievements(): {
+  defined: number;
+  rows: number;
+  populated: number;
+  firstSightingBefore: number;
+  firstSightingAfter: number;
+  incStmtWorked: boolean;
+  incStmtError?: string;
+  topUnlocked: { id: string; count: number }[];
+} {
+  const defined = DEFINED_ACHIEVEMENTS;
+  const rows = (db.prepare("SELECT COUNT(*) n FROM achievements").get() as { n: number }).n;
+  const populated = (db.prepare("SELECT COUNT(*) n FROM achievements WHERE count > 0").get() as { n: number }).n;
+  const before = (db.prepare("SELECT count FROM achievements WHERE id = 'first_sighting'").get() as { count: number } | undefined)?.count ?? 0;
+  let incStmtWorked = false;
+  let incStmtError: string | undefined;
+  try {
+    incStmt.run({ id: "first_sighting", ts: Date.now() });
+    incStmtWorked = true;
+  } catch (e) {
+    incStmtError = (e as Error).message;
+  }
+  const after = (db.prepare("SELECT count FROM achievements WHERE id = 'first_sighting'").get() as { count: number } | undefined)?.count ?? 0;
+  const topUnlocked = db.prepare("SELECT id, count FROM achievements WHERE count > 0 ORDER BY count DESC LIMIT 10").all() as { id: string; count: number }[];
+  return { defined, rows, populated, firstSightingBefore: before, firstSightingAfter: after, incStmtWorked, incStmtError, topUnlocked };
 }
 
 /** Snapshot for the UI: every achievement with its hint + (when unlocked) title and count. */

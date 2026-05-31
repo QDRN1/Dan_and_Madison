@@ -87,6 +87,12 @@ export const api = {
   }>("/admin/device-info", { pin }),
   adminResetStats: (pin: string) => post<{ ok: boolean; error?: string }>("/admin/reset-stats", { pin }),
   adminBackfillAchievements: (pin: string) => post<{ ok: boolean; processed?: number; fired?: number; error?: string }>("/admin/backfill-achievements", { pin }),
+  adminDiagnoseAchievements: (pin: string) => post<{
+    defined: number; rows: number; populated: number;
+    firstSightingBefore: number; firstSightingAfter: number;
+    incStmtWorked: boolean; incStmtError?: string;
+    topUnlocked: { id: string; count: number }[];
+  }>("/admin/diagnose-achievements", { pin }),
   adminRestart:    (pin: string) => post<{ ok: boolean; error?: string }>("/admin/restart", { pin }),
   adminUpdate:     (pin: string) => post<{ ok: boolean; error?: string }>("/admin/update", { pin }),
   wifiList: (pin: string) =>

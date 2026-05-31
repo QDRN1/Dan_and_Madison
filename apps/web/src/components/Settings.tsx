@@ -539,21 +539,24 @@ function AdminSection({ pin }: { pin: string }): JSX.Element {
   const [info, setInfo] = useState<DeviceInfo | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
-  const [confirm, setConfirm] = useState("");
 
   useEffect(() => {
     if (!expanded || info) return;
     api.deviceInfo(pin).then(setInfo).catch(() => undefined);
   }, [expanded, info, pin]);
 
+  // CONFIRM is collected via a prompt AFTER clicking the destructive button.
+  // Less to look at when admin is closed, harder to fat-finger from the wrong
+  // device.
   async function runDestructive(label: string, fn: () => Promise<{ ok: boolean; error?: string }>): Promise<void> {
-    if (confirm.trim().toUpperCase() !== "CONFIRM") { setMsg(`Type CONFIRM to ${label.toLowerCase()}.`); return; }
-    setBusy(true); setMsg("");
+    const code = window.prompt(`Type CONFIRM to ${label.toLowerCase()}:`);
+    if (code == null) return; // cancelled
+    if (code.trim().toUpperCase() !== "CONFIRM") { setMsg(`${label} cancelled — code didn't match.`); return; }
+    setBusy(true); setMsg(`${label}…`);
     try {
       const r = await fn();
       setMsg(r.ok ? `${label} ✓` : `${label} failed: ${r.error ?? "unknown"}`);
-      setConfirm("");
-      if (r.ok) setInfo(null); // force refresh
+      if (r.ok) setInfo(null);
     } catch (e) {
       setMsg(`${label} failed: ${(e as Error).message}`);
     } finally { setBusy(false); }
@@ -584,15 +587,6 @@ function AdminSection({ pin }: { pin: string }): JSX.Element {
               <div><b>Build:</b> {info.buildSha?.slice(0, 7) ?? "unknown"}</div>
             </div>
           )}
-          <input
-            className="input"
-            placeholder='Type CONFIRM to enable destructive buttons'
-            value={confirm}
-            onChange={(e) => { setConfirm(e.target.value); setMsg(""); }}
-            autoCapitalize="characters"
-            autoCorrect="off"
-            spellCheck={false}
-          />
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button className="btn" style={{ flex: 1, minWidth: 140 }} disabled={busy}
                     onClick={() => void runDestructive("Reset stats", () => api.adminResetStats(pin))}>
@@ -609,7 +603,7 @@ function AdminSection({ pin }: { pin: string }): JSX.Element {
           </div>
           <button className="btn" disabled={busy}
                   onClick={async () => {
-                    setBusy(true); setMsg("");
+                    setBusy(true); setMsg("Backfilling…");
                     try {
                       const r = await api.adminBackfillAchievements(pin);
                       setMsg(r.ok ? `Backfilled ${r.fired} unlocks from ${r.processed} sightings ✓` : `Backfill failed: ${r.error}`);
@@ -618,11 +612,24 @@ function AdminSection({ pin }: { pin: string }): JSX.Element {
                   }}>
             Backfill achievements from sightings
           </button>
+          <button className="btn" disabled={busy}
+                  onClick={async () => {
+                    setBusy(true); setMsg("Probing achievement engine…");
+                    try {
+                      const d = await api.adminDiagnoseAchievements(pin);
+                      const head = `rows ${d.rows}/${d.defined} · unlocked ${d.populated} · incStmt ${d.incStmtWorked ? "OK" : "FAIL"}`;
+                      const fs = `first_sighting ${d.firstSightingBefore} → ${d.firstSightingAfter}`;
+                      const top = d.topUnlocked.map((t) => `${t.id}=${t.count}`).join(", ") || "none";
+                      setMsg(`${head}\n${fs}${d.incStmtError ? `\nerror: ${d.incStmtError}` : ""}\ntop: ${top}`);
+                    } finally { setBusy(false); }
+                  }}>
+            Diagnose achievement engine
+          </button>
           <p className="muted" style={{ fontSize: 11, marginTop: 0 }}>
             Reset stats wipes the sightings/flagged/coverage/achievements tables (settings + WiFi profiles are kept).
             Pull update runs <code>git pull &amp;&amp; docker compose pull &amp;&amp; up -d</code> on the host.
           </p>
-          {msg && <div className="muted" style={{ fontSize: 12 }}>{msg}</div>}
+          {msg && <div className="muted" style={{ fontSize: 12, whiteSpace: "pre-wrap" }}>{msg}</div>}
         </div>
       )}
     </div>
