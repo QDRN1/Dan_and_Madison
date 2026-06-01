@@ -27,6 +27,11 @@ export function AircraftDetail(): JSX.Element | null {
   const setSelectedTrail = useRadar((s) => s.setSelectedTrail);
   const [detail, setDetail] = useState<Aircraft | null>(null);
   const [expanded, setExpanded] = useState(false);
+  // Minimized state collapses the card to a thin pill so you can pan/scroll
+  // the map and see the trail without dismissing the selection. Tap the pill
+  // (or the chevron) to bring the full card back. Separate from `expanded`
+  // because expanding goes the other direction (taller, scrolls internally).
+  const [minimized, setMinimized] = useState(false);
 
   // Pull full enrichment + trail for the detail card when selection changes.
   // The session trail comes back with the detail fetch; we then upgrade it
@@ -35,6 +40,7 @@ export function AircraftDetail(): JSX.Element | null {
   useEffect(() => {
     setDetail(null);
     setExpanded(false);
+    setMinimized(false);
     if (!selectedHex) return;
     let alive = true;
     api
@@ -81,14 +87,37 @@ export function AircraftDetail(): JSX.Element | null {
   const progress = !landed && typeof r?.progressPercent === "number" ? r.progressPercent : null;
 
   const callsign = a.flight?.trim();
+  // Direct live-map URL: adsb.lol globe opens zoomed on the exact hex with
+  // no login wall or search list. FR24's by-callsign URL is a search page,
+  // and FR24's per-flight URLs use unpredictable internal slugs — globe is
+  // the only deep-link that lands on a map immediately. Their /data/aircraft
+  // page is kept as a secondary "spec sheet" link for the registration.
+  const globeUrl = `https://globe.adsb.lol/?icao=${a.hex.toLowerCase()}`;
   const fr24Url = e?.registration
-    ? `https://www.flightradar24.com/data/aircraft/${encodeURIComponent(e.registration)}`
-    : callsign
-    ? `https://www.flightradar24.com/${encodeURIComponent(callsign)}`
+    ? `https://www.flightradar24.com/data/aircraft/${encodeURIComponent(e.registration.toLowerCase())}`
     : null;
 
+  // Minimized: thin pill at the bottom with just the callsign + restore.
+  if (minimized) {
+    return (
+      <div className="glass sheet sheet--mini" onClick={() => setMinimized(false)} role="button" aria-label="Restore card">
+        <div className="sheet-mini-row">
+          <span className="callsign-mini" style={{ color: altColor(ft) }}>{label(a)}</span>
+          {(origin || dest) && (
+            <span className="muted" style={{ fontSize: 12 }}>
+              {origin?.iata || origin?.icao || "???"} → {dest?.iata || dest?.icao || "???"}
+            </span>
+          )}
+          <span className="spacer" />
+          <button className="iconbtn" onClick={(ev) => { ev.stopPropagation(); setMinimized(false); }} aria-label="Restore">▲</button>
+          <button className="iconbtn" onClick={(ev) => { ev.stopPropagation(); select(null); }} aria-label="Close">✕</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className={`glass sheet scroll${expanded ? " sheet--expanded" : ""}`}>
+    <div className={`glass sheet sheet--compact scroll${expanded ? " sheet--expanded" : ""}`}>
       <div className="sheet-handle" onClick={() => setExpanded((v) => !v)} role="button" aria-label="Expand">
         <span />
       </div>
@@ -110,14 +139,13 @@ export function AircraftDetail(): JSX.Element | null {
           <div className="callsign" style={{ color: altColor(ft) }}>
             {label(a)}
           </div>
-          <div className="muted" style={{ fontSize: 13, marginTop: 2 }}>
+          <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
             {[e?.typeName, e?.operator].filter(Boolean).join(" · ") || "Identifying…"}
           </div>
         </div>
         {a.flagged && <span className="pill warn">★ Notable</span>}
-        <button className="iconbtn" onClick={() => select(null)} aria-label="Close">
-          ✕
-        </button>
+        <button className="iconbtn" onClick={() => setMinimized(true)} aria-label="Minimize" title="Minimize — see the map">▼</button>
+        <button className="iconbtn" onClick={() => select(null)} aria-label="Close">✕</button>
       </div>
 
       {photo && (
@@ -139,9 +167,11 @@ export function AircraftDetail(): JSX.Element | null {
           {origin?.city ?? origin?.name ?? ""} → {dest?.city ?? dest?.name ?? ""}
         </div>
       )}
-      {(origin || dest) && routeCredit(r?.source) && (
-        <div className="muted" style={{ fontSize: 11, marginTop: 4, opacity: 0.65 }}>
-          {routeCredit(r?.source)}
+      {(origin || dest) && (
+        <div className="muted route-disclaimer">
+          Routes are derived from the callsign and may not match every leg of
+          a rotation — this is the free data path.
+          {routeCredit(r?.source) && <span> {routeCredit(r?.source)}.</span>}
         </div>
       )}
 
@@ -188,11 +218,16 @@ export function AircraftDetail(): JSX.Element | null {
         </div>
       )}
 
-      {fr24Url && (
-        <a className="fr24-link" href={fr24Url} target="_blank" rel="noreferrer">
-          Track live on FlightRadar24 ↗
+      <div className="external-links">
+        <a className="fr24-link" href={globeUrl} target="_blank" rel="noreferrer">
+          Open in live map ↗
         </a>
-      )}
+        {fr24Url && (
+          <a className="fr24-link fr24-link-secondary" href={fr24Url} target="_blank" rel="noreferrer">
+            FR24 aircraft page ↗
+          </a>
+        )}
+      </div>
     </div>
   );
 }

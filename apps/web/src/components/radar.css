@@ -1253,3 +1253,80 @@
   animation: none;
   box-shadow: none;
 }
+
+/* ─── Aircraft detail card: compact + minimize ────────────────────────── */
+/* Trim the default sheet so the whole card fits without scrolling on a
+ * standard phone viewport. Each row gets a little less air; the route +
+ * times + 5x2 KV grid all fit above the fold for the typical case. */
+.sheet--compact {
+  padding: 12px 14px;
+  font-size: 13px;
+}
+.sheet--compact .callsign { font-size: 21px; letter-spacing: 0.02em; }
+.sheet--compact .ac-logo-band { margin: 0 0 6px; }
+.sheet--compact .ac-logo { height: 36px; padding: 4px 10px; }
+.sheet--compact .ac-photo { margin: 8px 0 4px; }
+.sheet--compact .ac-photo img { height: 132px; }
+.sheet--compact .route { margin: 10px 0 6px; }
+.sheet--compact .route .code { font-size: 19px; }
+.sheet--compact .flight-times { gap: 6px; margin: 8px 0 4px; }
+.sheet--compact .flight-times .ft-v { font-size: 14px; }
+.sheet--compact .kv-grid { gap: 7px 12px; margin-top: 8px; }
+.sheet--compact .kv .v { font-size: 14px; }
+.sheet--compact .progress { margin: 3px 0 1px; }
+
+/* Small muted disclaimer line under the route — sets expectations on the
+ * free route data without burying the airport codes. */
+.route-disclaimer {
+  font-size: 11px;
+  line-height: 1.4;
+  margin-top: 4px;
+  opacity: 0.7;
+}
+
+/* Minimized state — thin pill at the bottom so the map can be seen. Click
+ * anywhere on it (or the up-arrow icon) to restore the full card. */
+.sheet--mini {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(14px + env(safe-area-inset-bottom));
+  width: min(420px, calc(100vw - 24px));
+  z-index: 7;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+.sheet-mini-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.callsign-mini {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.sheet--mini .iconbtn {
+  width: 32px;
+  height: 32px;
+  font-size: 14px;
+}
+
+/* External-link row at the bottom of the card. Primary opens the live map
+ * directly on the hex (adsb.lol globe); secondary opens FR24's aircraft
+ * spec page by registration. FR24's by-callsign URL is a search list, so
+ * it's not used for the live-map link. */
+.external-links {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.external-links .fr24-link {
+  flex: 1;
+  text-align: center;
+}
+.fr24-link-secondary {
+  flex: 0.7 !important;
+  font-size: 12px !important;
+  opacity: 0.8;
+}
