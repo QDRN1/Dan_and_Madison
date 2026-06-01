@@ -187,6 +187,7 @@ export function recordSighting(ac: Aircraft): void {
     checkAchievements({
       ac,
       day,
+      now: Date.now(),
       todayUnique: todayUniqueAfter,
       allTimeUnique: allTimeUniqueAfter,
       operatorsToday: (opCountTodayStmt.get(day) as { n: number }).n,

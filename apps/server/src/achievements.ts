@@ -28,12 +28,18 @@ interface Ctx {
   ac: Aircraft;
   /** Local day key "YYYY-MM-DD" the sighting belongs to. */
   day: string;
+  /** Epoch ms the sighting occurred. Lets time-of-day predicates use the
+   *  sighting's own clock instead of `new Date()` — backfill replays history
+   *  outside of "now", and using wall-clock there blew golden_hour to 11,530. */
+  now: number;
   todayUnique: number;          // running count BEFORE this sighting was upserted
   allTimeUnique: number;        // running count BEFORE this sighting was upserted
   operatorsToday: number;
   operatorsAllTime: number;
   cpuTempF?: number;
 }
+
+const hourOf = (c: Ctx): number => new Date(c.now).getHours();
 
 function isMilitary(op?: string | null): boolean {
   if (!op) return false;
@@ -46,7 +52,18 @@ function altFt(ac: Aircraft): number | null {
   return typeof ac.altBaro === "number" ? ac.altBaro : null;
 }
 
-const WIDEBODY = /\bB7(47|77|87)|A3(30|40|50|80)|A350|A380|A340|A330|B767|B787\b/;
+// ICAO type designators, not marketing names. A380-800 is "A388",
+// 777-300ER is "B77W", 787-9 is "B789", etc. The old regex used "A380"
+// which never matched real data and silently never fired.
+const WIDEBODY = /\b(A30[0-9B]|A310|A33[0-9NF]|A34[0-9]|A35[0-9KF]|A38[0-9NF]|B74[0-9SLM]|B75[0-9]|B76[0-9]|B77[0-9LWX]|B78[0-9X]|MD11|DC10|IL96|L101)\b/i;
+const A380_RE = /\bA38[0-9NF]\b/i;
+const B777_RE = /\bB77[0-9LWX]\b/i;
+const B787_RE = /\bB78[0-9X]\b/i;
+const B737_RE = /\bB73[0-9MNJ]\b/i;
+const A320_FAMILY = /\bA(318|319|320|321|32[NF])\b/i;
+const EMBRAER_REGIONAL = /\b(E1[3579]0|E1[3579]5|E17[0-9]|E19[0-9])\b/i;
+const CRJ_RE = /\bCRJ[0-9X]\b/i;
+const ATR_RE = /\b(AT4[0-9]|AT7[0-9]|ATR)\b/i;
 const HELO = /\b(R22|R44|R66|EC[0-9]|H1[35]5|H125|H145|UH-?60|AS3|S70|EC1)/;
 const WARBIRD = /\bP51|P40|B17|B25|B29|SBD|TBM|F4U|SNJ|T6\b/;
 const CARGO_OPS = /\b(fedex|ups|dhl|atlas|polar|kalitta|amerijet|cargolux|west cargo)\b/i;
@@ -76,15 +93,15 @@ const DEFS: (AchievementDef & {
   { id: "iron_eyes", icon: "👀", hint: "A lot of looking", title: "Iron Eyes", once: true,
     test: (c) => c.allTimeUnique >= 10000 },
 
-  // ── Time of day ──
+  // ── Time of day (uses the sighting's own clock, not wall-clock) ──
   { id: "dawn_patrol", icon: "🌅", hint: "Early bird gets the worm", title: "Dawn Patrol",
-    test: () => { const h = new Date().getHours(); return h >= 5 && h < 7; } },
+    test: (c) => { const h = hourOf(c); return h >= 5 && h < 7; } },
   { id: "golden_hour", icon: "🌇", hint: "Last light", title: "Golden Hour",
-    test: () => { const h = new Date().getHours(); return h >= 19 && h < 21; } },
+    test: (c) => { const h = hourOf(c); return h >= 19 && h < 21; } },
   { id: "midnight_owl", icon: "🌙", hint: "Witching hour", title: "Midnight Watcher",
-    test: () => new Date().getHours() === 0 },
+    test: (c) => hourOf(c) === 0 },
   { id: "graveyard", icon: "🦉", hint: "Should you be up?", title: "Graveyard Shift",
-    test: () => { const h = new Date().getHours(); return h >= 2 && h < 5; } },
+    test: (c) => { const h = hourOf(c); return h >= 2 && h < 5; } },
 
   // ── Aircraft types ──
   { id: "iron_eagle", icon: "🪖", hint: "Salute a uniform", title: "Iron Eagle", once: true,
@@ -92,7 +109,7 @@ const DEFS: (AchievementDef & {
   { id: "heavy_metal", icon: "🛫", hint: "Real heavy lifting", title: "Heavy Metal", once: true,
     test: (c) => WIDEBODY.test(c.ac.enrichment?.typeCode ?? "") },
   { id: "superjumbo", icon: "🛩️", hint: "Two decks of grins", title: "Superjumbo", once: true,
-    test: (c) => /\bA380\b/.test(c.ac.enrichment?.typeCode ?? "") },
+    test: (c) => A380_RE.test(c.ac.enrichment?.typeCode ?? "") },
   { id: "warbird", icon: "✈️", hint: "Out of the museum", title: "Warbird", once: true,
     test: (c) => WARBIRD.test(c.ac.enrichment?.typeCode ?? "") },
   { id: "whirlybird", icon: "🚁", hint: "Vertical takeoff", title: "Whirlybird", once: true,
@@ -200,7 +217,129 @@ const DEFS: (AchievementDef & {
   // obvious test trigger; double-counts with `superjumbo` (same predicate)
   // so both fire on the same plane.
   { id: "a380_spotter", icon: "🦣", hint: "Two decks, four engines", title: "A380 Spotter", once: true,
-    test: (c) => /\bA380\b/i.test(c.ac.enrichment?.typeCode ?? "") },
+    test: (c) => A380_RE.test(c.ac.enrichment?.typeCode ?? "") },
+
+  // ── Aircraft type spotters (47 new) ──
+  { id: "b777_spotter", icon: "🛬", hint: "Triple seven overhead", title: "Triple Seven Spotter", once: true,
+    test: (c) => B777_RE.test(c.ac.enrichment?.typeCode ?? "") },
+  { id: "b787_spotter", icon: "🪶", hint: "Dreamliner overhead", title: "Dreamliner Spotter", once: true,
+    test: (c) => B787_RE.test(c.ac.enrichment?.typeCode ?? "") },
+  { id: "b737_spotter", icon: "✈️", hint: "Workhorse of the skies", title: "737 Spotter", once: true,
+    test: (c) => B737_RE.test(c.ac.enrichment?.typeCode ?? "") },
+  { id: "a320_family_spotter", icon: "🛩️", hint: "European workhorse", title: "A320 Family", once: true,
+    test: (c) => A320_FAMILY.test(c.ac.enrichment?.typeCode ?? "") },
+  { id: "embraer_spotter", icon: "🇧🇷", hint: "Brazilian regional", title: "Embraer Spotter", once: true,
+    test: (c) => EMBRAER_REGIONAL.test(c.ac.enrichment?.typeCode ?? "") },
+  { id: "crj_spotter", icon: "🪁", hint: "Tight cabin, long legs", title: "CRJ Spotter", once: true,
+    test: (c) => CRJ_RE.test(c.ac.enrichment?.typeCode ?? "") },
+  { id: "atr_spotter", icon: "🌀", hint: "Twin turboprop", title: "ATR Spotter", once: true,
+    test: (c) => ATR_RE.test(c.ac.enrichment?.typeCode ?? "") },
+  { id: "dc3_spotter", icon: "🎞️", hint: "1935 design, still flying", title: "DC-3 Spotter", once: true,
+    test: (c) => /\bDC3\b/i.test(c.ac.enrichment?.typeCode ?? "") },
+
+  // ── Foreign airline spotters ──
+  { id: "spotted_emirates", icon: "🇦🇪", hint: "Dubai overhead", title: "Spotted Emirates", once: true,
+    test: (c) => /emirates/i.test(c.ac.enrichment?.operator ?? "") },
+  { id: "spotted_lufthansa", icon: "🇩🇪", hint: "Crane on the tail", title: "Spotted Lufthansa", once: true,
+    test: (c) => /lufthansa/i.test(c.ac.enrichment?.operator ?? "") },
+  { id: "spotted_british_airways", icon: "🇬🇧", hint: "Speedbird overhead", title: "Spotted British Airways", once: true,
+    test: (c) => /british airways/i.test(c.ac.enrichment?.operator ?? "") },
+  { id: "spotted_air_france", icon: "🇫🇷", hint: "Tricolor in the sky", title: "Spotted Air France", once: true,
+    test: (c) => /air france/i.test(c.ac.enrichment?.operator ?? "") },
+  { id: "spotted_klm", icon: "🇳🇱", hint: "Royal Dutch overhead", title: "Spotted KLM", once: true,
+    test: (c) => /\bklm\b/i.test(c.ac.enrichment?.operator ?? "") },
+  { id: "spotted_qatar", icon: "🇶🇦", hint: "Oryx on the tail", title: "Spotted Qatar Airways", once: true,
+    test: (c) => /qatar/i.test(c.ac.enrichment?.operator ?? "") },
+  { id: "spotted_singapore", icon: "🇸🇬", hint: "Pacific star carrier", title: "Spotted Singapore Airlines", once: true,
+    test: (c) => /singapore/i.test(c.ac.enrichment?.operator ?? "") },
+  { id: "spotted_cathay", icon: "🇭🇰", hint: "Brushwing in flight", title: "Spotted Cathay Pacific", once: true,
+    test: (c) => /cathay/i.test(c.ac.enrichment?.operator ?? "") },
+  { id: "spotted_jal", icon: "🇯🇵", hint: "Tsurumaru overhead", title: "Spotted Japan Airlines", once: true,
+    test: (c) => /japan airlines|\bjal\b/i.test(c.ac.enrichment?.operator ?? "") },
+  { id: "spotted_ana", icon: "🇯🇵", hint: "Triton in the sky", title: "Spotted ANA", once: true,
+    test: (c) => /\bana\b|all nippon/i.test(c.ac.enrichment?.operator ?? "") },
+  { id: "spotted_virgin_atlantic", icon: "🦄", hint: "Red tail overhead", title: "Spotted Virgin Atlantic", once: true,
+    test: (c) => /virgin atlantic/i.test(c.ac.enrichment?.operator ?? "") },
+  { id: "spotted_korean_air", icon: "🇰🇷", hint: "Taegeuk in the sky", title: "Spotted Korean Air", once: true,
+    test: (c) => /korean air/i.test(c.ac.enrichment?.operator ?? "") },
+  { id: "spotted_turkish", icon: "🇹🇷", hint: "Bridge between two worlds", title: "Spotted Turkish Airlines", once: true,
+    test: (c) => /turkish airlines/i.test(c.ac.enrichment?.operator ?? "") },
+
+  // ── US airline spotters ──
+  { id: "spotted_southwest", icon: "💛", hint: "Heart livery overhead", title: "Spotted Southwest", once: true,
+    test: (c) => /southwest/i.test(c.ac.enrichment?.operator ?? "") },
+  { id: "spotted_alaska", icon: "🗻", hint: "Eskimo on the tail", title: "Spotted Alaska", once: true,
+    test: (c) => /alaska/i.test(c.ac.enrichment?.operator ?? "") },
+  { id: "spotted_jetblue", icon: "💙", hint: "All-blue tail", title: "Spotted JetBlue", once: true,
+    test: (c) => /jetblue/i.test(c.ac.enrichment?.operator ?? "") },
+  { id: "spotted_spirit", icon: "💛", hint: "Yellow with a smile", title: "Spotted Spirit", once: true,
+    test: (c) => /spirit/i.test(c.ac.enrichment?.operator ?? "") },
+  { id: "spotted_hawaiian", icon: "🌺", hint: "Pualani in flight", title: "Spotted Hawaiian", once: true,
+    test: (c) => /hawaiian/i.test(c.ac.enrichment?.operator ?? "") },
+  { id: "spotted_allegiant", icon: "🎰", hint: "Vegas route specialist", title: "Spotted Allegiant", once: true,
+    test: (c) => /allegiant/i.test(c.ac.enrichment?.operator ?? "") },
+
+  // ── Cargo carrier spotters ──
+  { id: "spotted_fedex", icon: "📦", hint: "Purple tail overhead", title: "Spotted FedEx", once: true,
+    test: (c) => /fedex/i.test(c.ac.enrichment?.operator ?? "") },
+  { id: "spotted_ups", icon: "🟫", hint: "Brown delivers from above", title: "Spotted UPS", once: true,
+    test: (c) => /\bups\b/i.test(c.ac.enrichment?.operator ?? "") },
+  { id: "spotted_dhl", icon: "📮", hint: "Yellow + red express", title: "Spotted DHL", once: true,
+    test: (c) => /\bdhl\b/i.test(c.ac.enrichment?.operator ?? "") },
+  { id: "spotted_atlas", icon: "🌍", hint: "Atlas on the wing", title: "Spotted Atlas Air", once: true,
+    test: (c) => /atlas/i.test(c.ac.enrichment?.operator ?? "") },
+
+  // ── Volume milestones (long-tail) ──
+  { id: "quarter_kilo", icon: "🥉", hint: "A quarter of a thousand", title: "Quarter Kilo", once: true,
+    test: (c) => c.allTimeUnique >= 250 },
+  { id: "half_kilo", icon: "🥈", hint: "Halfway to four digits", title: "Half Kilo", once: true,
+    test: (c) => c.allTimeUnique >= 500 },
+  { id: "two_kilo", icon: "🔟", hint: "Twice the club", title: "Two Kilo Club", once: true,
+    test: (c) => c.allTimeUnique >= 2000 },
+  { id: "five_kilo", icon: "💎", hint: "Five thousand unique", title: "Five Kilo Club", once: true,
+    test: (c) => c.allTimeUnique >= 5000 },
+  { id: "ten_kilo", icon: "👑", hint: "Five-digit unique", title: "Ten Kilo Club", once: true,
+    test: (c) => c.allTimeUnique >= 10000 },
+
+  // ── More time-of-day buckets ──
+  { id: "breakfast_hour", icon: "🥞", hint: "Coffee + traffic", title: "Breakfast Hour",
+    test: (c) => { const h = hourOf(c); return h >= 7 && h < 8; } },
+  { id: "lunch_rush", icon: "🥪", hint: "Midday departures", title: "Lunch Rush",
+    test: (c) => { const h = hourOf(c); return h >= 12 && h < 13; } },
+  { id: "evening_traffic", icon: "🌃", hint: "Headed home", title: "Evening Traffic",
+    test: (c) => { const h = hourOf(c); return h >= 18 && h < 19; } },
+  { id: "late_evening", icon: "🌌", hint: "After the news", title: "Late Evening",
+    test: (c) => { const h = hourOf(c); return h >= 22 && h < 23; } },
+
+  // ── Squawks & special codes ──
+  { id: "vfr_squawk", icon: "🔢", hint: "Twelve hundred", title: "VFR Squawk", once: true,
+    test: (c) => c.ac.squawk === "1200" },
+  { id: "normal_squawk_7000", icon: "7️⃣", hint: "ICAO conspicuity", title: "Conspicuity Code", once: true,
+    test: (c) => c.ac.squawk === "7000" },
+
+  // ── Speed / altitude extremes ──
+  { id: "slow_flyer", icon: "🐢", hint: "Below a hundred knots", title: "Slow Flyer", once: true,
+    test: (c) => (c.ac.gs ?? 9999) < 100 && (c.ac.gs ?? 0) > 0 },
+  { id: "fast_mover", icon: "🚀", hint: "Five hundred knots over", title: "Fast Mover", once: true,
+    test: (c) => (c.ac.gs ?? 0) >= 500 },
+  { id: "quick_climber", icon: "📈", hint: "Three thousand feet per minute up", title: "Quick Climber", once: true,
+    test: (c) => (c.ac.baroRate ?? 0) >= 3000 },
+  { id: "quick_descender", icon: "📉", hint: "Three thousand feet per minute down", title: "Quick Descender", once: true,
+    test: (c) => (c.ac.baroRate ?? 0) <= -3000 },
+  { id: "edge_of_radar", icon: "📡", hint: "Hundred and fifty out", title: "Edge of Radar", once: true,
+    test: (c) => (c.ac.distNm ?? 0) >= 150 },
+  { id: "horizon_pusher", icon: "🌅", hint: "Two hundred nautical out", title: "Horizon Pusher", once: true,
+    test: (c) => (c.ac.distNm ?? 0) >= 200 },
+
+  // ── Busy-day bookends ──
+  { id: "fifty_today", icon: "5️⃣0️⃣", hint: "Half a hundred in a day", title: "Fifty Today",
+    test: (c) => c.todayUnique === 50 },
+  { id: "two_hundred_today", icon: "🎯", hint: "Two hundred in a day", title: "Two Hundred Day",
+    test: (c) => c.todayUnique === 200 },
+  { id: "operator_variety", icon: "🎨", hint: "Ten operators in a day", title: "Operator Variety",
+    test: (c) => c.operatorsToday === 10 },
+  { id: "operator_pageant", icon: "🌈", hint: "Twenty-five operators in a day", title: "Operator Pageant",
+    test: (c) => c.operatorsToday === 25 },
 ];
 
 // ─── Persistence ────────────────────────────────────────────────────────────
@@ -233,6 +372,13 @@ const allStmt = db.prepare(`
 for (const def of DEFS) {
   try { seedStmt.run(def.id); } catch { /* table not yet ready — first-run race */ }
 }
+// Drop orphaned rows from achievement IDs that no longer exist in DEFS
+// (renames, removed sentinels, etc.) so the table count stays in sync with
+// the static denominator.
+try {
+  const placeholders = DEFS.map(() => "?").join(",");
+  db.prepare(`DELETE FROM achievements WHERE id NOT IN (${placeholders})`).run(...DEFS.map((d) => d.id));
+} catch { /* ignore — first-run race */ }
 
 /** Number of defined achievements — used as the authoritative denominator. */
 export const DEFINED_ACHIEVEMENTS = DEFS.length;
@@ -275,8 +421,11 @@ export function backfillAchievements(): { processed: number; fired: number } {
     originIcao: string | null; destIcao: string | null;
     firstSeen: number; lastSeen: number; maxDistNm: number;
   }>;
-  let fired = 0;
-  const beforeTotal = (db.prepare("SELECT COALESCE(SUM(count), 0) n FROM achievements").get() as { n: number }).n;
+
+  // Zero every count before walking — otherwise re-running backfill stacks
+  // repeatable predicates (golden_hour, century_day, etc.) on top of prior
+  // runs. first_at stays so the original unlock moment isn't lost.
+  db.exec("UPDATE achievements SET count = 0, last_at = NULL");
 
   const todaySeen = new Set<string>();
   const everSeen = new Set<string>();
@@ -305,14 +454,16 @@ export function backfillAchievements(): { processed: number; fired: number } {
     checkAll({
       ac,
       day: r.day,
+      // Use the sighting's own timestamp so time-of-day predicates fire
+      // against when the plane was actually overhead, not wall-clock now.
+      now: r.firstSeen,
       todayUnique,
       allTimeUnique,
       operatorsToday: 0,
       operatorsAllTime: 0,
     });
   }
-  const afterTotal = (db.prepare("SELECT COALESCE(SUM(count), 0) n FROM achievements").get() as { n: number }).n;
-  fired = Math.max(0, afterTotal - beforeTotal);
+  const fired = (db.prepare("SELECT COALESCE(SUM(count), 0) n FROM achievements").get() as { n: number }).n;
   return { processed: rows.length, fired };
 }
 
