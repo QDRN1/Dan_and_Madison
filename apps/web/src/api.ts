@@ -92,6 +92,8 @@ export const api = {
     firstSightingBefore: number; firstSightingAfter: number;
     incStmtWorked: boolean; incStmtError?: string;
     topUnlocked: { id: string; count: number }[];
+    topTypes: { typeCode: string; count: number }[];
+    a38xSightings: { typeCode: string; flight: string | null; operator: string | null }[];
   }>("/admin/diagnose-achievements", { pin }),
   adminRestart:    (pin: string) => post<{ ok: boolean; error?: string }>("/admin/restart", { pin }),
   adminUpdate:     (pin: string) => post<{ ok: boolean; error?: string }>("/admin/update", { pin }),

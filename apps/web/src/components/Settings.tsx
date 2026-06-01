@@ -620,7 +620,11 @@ function AdminSection({ pin }: { pin: string }): JSX.Element {
                       const head = `rows ${d.rows}/${d.defined} · unlocked ${d.populated} · incStmt ${d.incStmtWorked ? "OK" : "FAIL"}`;
                       const fs = `first_sighting ${d.firstSightingBefore} → ${d.firstSightingAfter}`;
                       const top = d.topUnlocked.map((t) => `${t.id}=${t.count}`).join(", ") || "none";
-                      setMsg(`${head}\n${fs}${d.incStmtError ? `\nerror: ${d.incStmtError}` : ""}\ntop: ${top}`);
+                      const types = d.topTypes.map((t) => `${t.typeCode}=${t.count}`).join(", ") || "none";
+                      const a38 = d.a38xSightings.length === 0
+                        ? "no A38x rows in sightings — no Airbus A380 has been spotted yet"
+                        : d.a38xSightings.map((s) => `${s.typeCode}${s.flight ? ` (${s.flight.trim()})` : ""}${s.operator ? ` · ${s.operator}` : ""}`).join("\n");
+                      setMsg(`${head}\n${fs}${d.incStmtError ? `\nerror: ${d.incStmtError}` : ""}\ntop unlocked: ${top}\n\ntop types: ${types}\n\nA38x rows:\n${a38}`);
                     } finally { setBusy(false); }
                   }}>
             Diagnose achievement engine

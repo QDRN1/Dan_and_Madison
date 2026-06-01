@@ -52,6 +52,149 @@ function altFt(ac: Aircraft): number | null {
   return typeof ac.altBaro === "number" ? ac.altBaro : null;
 }
 
+/** Longer "here's what this badge means" copy keyed by achievement id.
+ *  Surfaced only after the badge is earned, so it doesn't spoil unearned
+ *  ones — the `hint` field still teases the locked state. Missing entries
+ *  fall back to the hint in the UI. */
+const DESCRIPTIONS: Record<string, string> = {
+  // Volume / staying power
+  first_sighting: "Your first ADS-B contact ever. Every other badge on this list is downstream of this moment.",
+  ten_sightings: "Ten unique aircraft tracked all-time. You're past the random-poke phase and are actually using the radar.",
+  hundred_today: "100 unique aircraft in a single day — the Pi's antenna is earning its keep.",
+  mile_high: "Every 5,280 unique aircraft tracked. Named after the actual altitude club but counting unique hexes instead of feet.",
+  iron_eyes: "Ten thousand unique aircraft ever. You've watched the sky for real.",
+
+  // Time of day
+  dawn_patrol: "Spotted an aircraft between 5 and 7 AM local — the dawn cargo and early commuter slot.",
+  golden_hour: "Spotted an aircraft between 7 and 9 PM local — the last-light window photographers chase.",
+  midnight_owl: "Spotted an aircraft during the midnight hour (00:00–00:59 local).",
+  graveyard: "Spotted an aircraft between 2 and 5 AM local — overnight cargo and red-eyes only.",
+  breakfast_hour: "Spotted an aircraft between 7 and 8 AM local — the breakfast departure bank.",
+  lunch_rush: "Spotted an aircraft between 12 and 1 PM local.",
+  evening_traffic: "Spotted an aircraft between 6 and 7 PM local — evening commute bank.",
+  late_evening: "Spotted an aircraft between 10 and 11 PM local.",
+
+  // Aircraft types
+  iron_eagle: "Spotted a military aircraft — operator field matched air force, navy, army, marines, NATO, or related.",
+  heavy_metal: "Spotted a wide-body airliner — 747, 767, 777, 787, A330/340/350/380, MD-11, IL-96, L-1011.",
+  superjumbo: "Spotted an Airbus A380. ICAO type code A388 — only Emirates, Singapore, BA, Qantas, Lufthansa, ANA, Korean, China Southern, Etihad still fly them.",
+  warbird: "Spotted a WWII-era warbird (P-51, P-40, B-17, B-25, B-29, SBD, TBM, F4U, SNJ, T-6).",
+  whirlybird: "Spotted a helicopter — Robinson 22/44/66, Eurocopter, H125/135/145, UH-60, AS3xx, S-70, etc.",
+  cargo_king: "Spotted a major cargo carrier — FedEx, UPS, DHL, Atlas, Polar, Kalitta, Amerijet, Cargolux, West Cargo.",
+  bizjet: "Spotted a business jet — Citation, Gulfstream, Global Express, Hawker, Falcon, Challenger, Embraer Phenom, Learjet.",
+  blimp_spotter: "Spotted a blimp or airship — Goodyear or otherwise.",
+  a380_spotter: "Sentinel badge for the A380 — same predicate as Superjumbo, kept separate as a manual test of the achievement engine.",
+  b777_spotter: "Spotted a Boeing 777 — the long-haul workhorse. ICAO type codes B772, B77L, B77W, B773.",
+  b787_spotter: "Spotted a Boeing 787 Dreamliner. ICAO type codes B788, B789, B78X.",
+  b737_spotter: "Spotted a Boeing 737 — domestic mainline backbone in the US. The most common type you'll see by far.",
+  a320_family_spotter: "Spotted an Airbus A320 family aircraft (A319, A320, A321, A32N).",
+  embraer_spotter: "Spotted a Brazilian-built Embraer regional jet (E135 through E195).",
+  crj_spotter: "Spotted a Bombardier CRJ — the long, tight regional jet you've been crammed into for a Delta Connection hop.",
+  atr_spotter: "Spotted an ATR turboprop — the European-built twin you only see on shorter regional routes.",
+  dc3_spotter: "Spotted a DC-3. Designed in 1935, still flying commercial cargo runs almost 90 years later.",
+
+  // Speed / altitude / distance
+  stratosphere: "Spotted an aircraft cruising above 40,000 feet — into the bottom of the stratosphere.",
+  mach_chaser: "Spotted an aircraft moving at 600+ knots ground speed.",
+  ground_effect: "Spotted an aircraft below 200 feet — likely on short final or just airborne.",
+  buzz_cut: "Spotted an aircraft right overhead — within 0.5 nautical miles of the receiver, alt under 2,000 ft.",
+  long_distance: "Spotted an aircraft at 200+ nm range — most of the way to the radar horizon.",
+  far_horizon: "Spotted an aircraft at 250+ nm range — pushing the theoretical reception limit for a Pi at this altitude.",
+  slow_flyer: "Spotted an aircraft moving slower than 100 knots ground speed — small GA or a heavy on approach.",
+  fast_mover: "Spotted an aircraft moving at 500+ knots ground speed — strong jet stream tailwind.",
+  quick_climber: "Spotted an aircraft climbing at 3,000+ feet per minute — military, or a light jet showing off.",
+  quick_descender: "Spotted an aircraft descending at 3,000+ feet per minute — emergency descent profile or just a steep approach.",
+  edge_of_radar: "Spotted an aircraft at 150+ nm — beyond your typical reception ring.",
+  horizon_pusher: "Spotted an aircraft at 200+ nm — right at the radar horizon.",
+
+  // Operators / callsigns / specials
+  variety_pack: "Tracked aircraft from 25+ distinct operators all-time.",
+  globetrotter: "Tracked aircraft from 100+ distinct operators all-time.",
+  presidential: "Spotted a presidential or executive flight (AF1/AF2/VENUS/SAM/EXEC callsign).",
+  wildlife: "Spotted a Frontier Airlines (FFT) flight — every Frontier tail has a real animal painted on it.",
+  regional_champ: "Spotted a US regional carrier (SkyWest, Endeavor, Republic, GoJet, PSA, Piedmont, etc.).",
+  test_pilot: "Spotted a manufacturer test flight (Boeing BOEnn or Airbus AIB callsign).",
+  nato_air: "Spotted a NATO-allied military aircraft (RAF/RFR/GAF/GAM/ASCOT/RRR/NATO).",
+
+  // Emergency squawks
+  mayday: "Witnessed a 7700 squawk — general emergency. Hopefully a test or a misclick.",
+  radio_silent: "Witnessed a 7600 squawk — radio failure.",
+  hijack_code: "Witnessed a 7500 squawk — unlawful interference / hijack code. Almost always a finger slip.",
+
+  // Direction
+  north_bound: "Spotted an aircraft tracking due north (track within ±22.5° of 0°).",
+  south_bound: "Spotted an aircraft tracking due south.",
+  east_bound: "Spotted an aircraft tracking due east.",
+  west_bound: "Spotted an aircraft tracking due west.",
+
+  // Holidays
+  santa: "Spotted on December 25.",
+  fireworks: "Spotted on July 4.",
+  valentine: "Spotted on February 14.",
+  national_dog_day: "Spotted on August 26 — National Dog Day. For Madison.",
+  new_year: "Spotted on January 1.",
+
+  // Animals
+  dog_callsign: "Caught a callsign containing DOG / PUP / BARK / FIDO / HUSKY / BEAGLE.",
+  wild_callsign: "Caught a callsign with a wild animal in it (EAGLE / HAWK / FOX / TIGER / BEAR / WOLF / LION / SHARK).",
+
+  // Persistence / day
+  first_today: "First plane of the day, every day. The opening bell.",
+  century_day: "100 unique aircraft in a single day.",
+
+  // System
+  hot_box: "Pi CPU temperature crossed 175°F when this aircraft was sighted — the fan is earning its money.",
+  round_world: "Spotted a major foreign carrier overhead.",
+  deltas_dozen: "(unused — was a planned aggregate-window predicate)",
+  skywatcher: "Five hundred unique aircraft tracked all-time.",
+  kilo_club: "One thousand unique aircraft tracked all-time.",
+  radarversary: "Anniversary of the first home WiFi connection. Fires once per year.",
+
+  // Foreign airline spotters
+  spotted_emirates: "Spotted an Emirates flight overhead. Look at the route — odds are it's headed for Dubai.",
+  spotted_lufthansa: "Spotted a Lufthansa flight — German flag carrier with the crane on the tail.",
+  spotted_british_airways: "Spotted a British Airways flight — callsign Speedbird.",
+  spotted_air_france: "Spotted an Air France flight — French flag carrier with the tricolor stripe.",
+  spotted_klm: "Spotted a KLM flight — the oldest still-operating airline in the world (founded 1919).",
+  spotted_qatar: "Spotted a Qatar Airways flight — Skytrax World's Best Airline regular.",
+  spotted_singapore: "Spotted a Singapore Airlines flight — Pacific star carrier.",
+  spotted_cathay: "Spotted a Cathay Pacific flight — Hong Kong flag carrier with the brushwing logo.",
+  spotted_jal: "Spotted a Japan Airlines flight — the tsurumaru (crane) tail.",
+  spotted_ana: "Spotted an All Nippon Airways flight — Japan's largest carrier.",
+  spotted_virgin_atlantic: "Spotted a Virgin Atlantic flight — red tails, named individual aircraft.",
+  spotted_korean_air: "Spotted a Korean Air flight — the taegeuk on the tail.",
+  spotted_turkish: "Spotted a Turkish Airlines flight — flies to more countries than any other airline.",
+
+  // US airline spotters
+  spotted_southwest: "Spotted a Southwest Airlines flight — open seating, heart on the belly.",
+  spotted_alaska: "Spotted an Alaska Airlines flight — Eskimo face on the tail.",
+  spotted_jetblue: "Spotted a JetBlue flight — all-blue tail patterns.",
+  spotted_spirit: "Spotted a Spirit Airlines flight — yellow ultra-low-cost.",
+  spotted_hawaiian: "Spotted a Hawaiian Airlines flight — Pualani (flower of the sky) on the tail.",
+  spotted_allegiant: "Spotted an Allegiant Air flight — Vegas/Florida route specialist.",
+
+  // Cargo
+  spotted_fedex: "Spotted a FedEx Express flight — purple tail, Memphis hub.",
+  spotted_ups: "Spotted a UPS flight — brown delivers from above.",
+  spotted_dhl: "Spotted a DHL flight — yellow and red express.",
+  spotted_atlas: "Spotted an Atlas Air flight — ACMI carrier moving anything for anyone.",
+
+  // Volume long-tail
+  quarter_kilo: "250 unique aircraft tracked all-time.",
+  half_kilo: "500 unique aircraft tracked all-time.",
+  two_kilo: "2,000 unique aircraft tracked all-time.",
+  five_kilo: "5,000 unique aircraft tracked all-time.",
+  ten_kilo: "10,000 unique aircraft tracked all-time.",
+
+  // Squawks / day
+  vfr_squawk: "Spotted an aircraft squawking 1200 — VFR conspicuity code, usually small private GA.",
+  normal_squawk_7000: "Spotted an aircraft squawking 7000 — ICAO general conspicuity code outside the US.",
+  fifty_today: "50 unique aircraft in a single day.",
+  two_hundred_today: "200 unique aircraft in a single day — a really busy reception window.",
+  operator_variety: "Saw 10+ distinct operators in a single day.",
+  operator_pageant: "Saw 25+ distinct operators in a single day.",
+};
+
 // ICAO type designators, not marketing names. A380-800 is "A388",
 // 777-300ER is "B77W", 787-9 is "B789", etc. The old regex used "A380"
 // which never matched real data and silently never fired.
@@ -478,6 +621,8 @@ export function diagnoseAchievements(): {
   incStmtWorked: boolean;
   incStmtError?: string;
   topUnlocked: { id: string; count: number }[];
+  topTypes: { typeCode: string; count: number }[];
+  a38xSightings: { typeCode: string; flight: string | null; operator: string | null }[];
 } {
   const defined = DEFINED_ACHIEVEMENTS;
   const rows = (db.prepare("SELECT COUNT(*) n FROM achievements").get() as { n: number }).n;
@@ -493,7 +638,25 @@ export function diagnoseAchievements(): {
   }
   const after = (db.prepare("SELECT count FROM achievements WHERE id = 'first_sighting'").get() as { count: number } | undefined)?.count ?? 0;
   const topUnlocked = db.prepare("SELECT id, count FROM achievements WHERE count > 0 ORDER BY count DESC LIMIT 10").all() as { id: string; count: number }[];
-  return { defined, rows, populated, firstSightingBefore: before, firstSightingAfter: after, incStmtWorked, incStmtError, topUnlocked };
+  // Diagnostic surfaces what type codes are actually in the sightings
+  // table + every A38x row specifically — so we can see whether the
+  // upstream data ever tagged anything as an A380 (ICAO A388).
+  const topTypes = db.prepare(`
+    SELECT type_code AS typeCode, COUNT(*) AS count FROM sightings
+    WHERE type_code IS NOT NULL AND type_code != ''
+    GROUP BY type_code ORDER BY count DESC LIMIT 15
+  `).all() as { typeCode: string; count: number }[];
+  const a38xSightings = db.prepare(`
+    SELECT type_code AS typeCode, flight, operator FROM sightings
+    WHERE type_code LIKE 'A38%'
+    GROUP BY type_code, flight LIMIT 20
+  `).all() as { typeCode: string; flight: string | null; operator: string | null }[];
+  return {
+    defined, rows, populated,
+    firstSightingBefore: before, firstSightingAfter: after,
+    incStmtWorked, incStmtError, topUnlocked,
+    topTypes, a38xSightings,
+  };
 }
 
 /** Snapshot for the UI: every achievement with its hint + (when unlocked) title and count. */
@@ -505,11 +668,15 @@ export function listAchievements(): AchievementProgress[] {
     }, {});
   return DEFS.map((d) => {
     const r = rows[d.id] ?? { count: 0, first_at: null, last_at: null };
+    const earned = r.count > 0;
     return {
       id: d.id,
       icon: d.icon,
       hint: d.hint,
-      title: r.count > 0 ? d.title : undefined,
+      title: earned ? d.title : undefined,
+      // Longer description only goes out for earned badges — locked ones
+      // keep the hint as a mystery teaser.
+      description: earned ? DESCRIPTIONS[d.id] : undefined,
       count: r.count,
       firstAt: r.first_at ?? undefined,
       lastAt: r.last_at ?? undefined,

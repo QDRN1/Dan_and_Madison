@@ -214,6 +214,10 @@ export interface AchievementDef {
   icon: string;
   hint: string;
   title: string;
+  /** Longer plain-language explanation of what triggers / triggered the
+   *  badge. Shown in the detail popup once the badge is earned. Omitted
+   *  while locked so it doesn't spoil the surprise. */
+  description?: string;
 }
 
 /** What the UI sees per achievement — hint always, title+count once unlocked. */
@@ -223,6 +227,8 @@ export interface AchievementProgress {
   hint: string;
   /** Set only when count > 0 (so the UI keeps things mysterious). */
   title?: string;
+  /** Set only when count > 0 — the longer "here's what this badge means" copy. */
+  description?: string;
   count: number;
   firstAt?: number;
   lastAt?: number;
