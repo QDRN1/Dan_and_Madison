@@ -42,14 +42,21 @@ export function SightingsPopout(): JSX.Element | null {
     return () => { if (searchTimer.current) clearTimeout(searchTimer.current); };
   }, [q]);
 
+  // In-view popout reads from the live aircraft store and re-filters on
+  // every snapshot. Cheap — purely client-side, no flash.
   useEffect(() => {
-    if (!popout) return;
-    if (popout.kind === "in-view") {
-      const filtered = applyClientFilters(live, debouncedQ, airline, sort);
-      setPage(filtered);
-      setLoading(false);
-      return;
-    }
+    if (!popout || popout.kind !== "in-view") return;
+    setPage(applyClientFilters(live, debouncedQ, airline, sort));
+    setLoading(false);
+  }, [popout, debouncedQ, airline, sort, live]);
+
+  // Sightings + farthest popouts hit the server. `live` is deliberately NOT
+  // in the dep list — including it (as I previously did) re-fired the fetch
+  // on every websocket snapshot, flashing "Loading…" every ~1s and making
+  // the whole popout feel like it was strobing. This effect only re-runs
+  // when the actual query inputs change.
+  useEffect(() => {
+    if (!popout || popout.kind === "in-view") return;
     let alive = true;
     setLoading(true);
     api.sightings({ scope, sort, q: debouncedQ, airline, offset, limit: PAGE_SIZE })
@@ -57,7 +64,7 @@ export function SightingsPopout(): JSX.Element | null {
       .catch(() => undefined)
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [popout, scope, sort, debouncedQ, airline, offset, live]);
+  }, [popout, scope, sort, debouncedQ, airline, offset]);
 
   // Esc to close.
   useEffect(() => {
