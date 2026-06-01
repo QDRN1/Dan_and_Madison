@@ -194,8 +194,11 @@ export function recordSighting(ac: Aircraft): void {
       operatorsAllTime: (opCountAllStmt.get() as { n: number }).n,
       cpuTempF: readCpuTempC() != null ? readCpuTempC()! * 9 / 5 + 32 : undefined,
     });
-  } catch {
+  } catch (e) {
     // Stats are best-effort — a write hiccup must never break live tracking.
+    // Log so silent failures (column shape changes, disk full, etc.) show
+    // up in `docker logs` instead of disappearing into the void.
+    console.error("[stats] recordSighting failed:", (e as Error).message);
   }
 }
 

@@ -1242,3 +1242,14 @@
   .brand-text { display: none; }
   .topbar { gap: 5px; }
 }
+
+/* Live pill flips to a red "Offline" state when the WS feed is stale/dead. */
+.live-pill-offline {
+  border: 1px solid var(--danger);
+  color: var(--danger);
+}
+.live-pill-offline .dot {
+  background: var(--danger);
+  animation: none;
+  box-shadow: none;
+}

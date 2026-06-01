@@ -63,6 +63,7 @@ import { adminResetStats, getDeviceInfo } from "../admin.js";
 import { backfillAchievements, diagnoseAchievements } from "../achievements.js";
 import { deriveFreeRouteTimes } from "../derived-times.js";
 import { fetchExtendedTrack } from "../extended-track.js";
+import { getOffRadarAircraft } from "../off-radar.js";
 import { applyFeedersInBackground, writeFeederEnv } from "../feeder.js";
 import { store } from "../poller.js";
 import { getStats, listAllTime, listFarthest, listNotable, listSightings, listToday } from "../stats.js";
@@ -116,7 +117,11 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
 
   app.get<{ Params: { hex: string } }>("/aircraft/:hex", async (req, reply) => {
     const hex = req.params.hex.toLowerCase();
-    const ac = store.get(hex);
+    // Local Pi readings first; if it's an off-radar fill-in plane from
+    // adsb.lol, the local store doesn't know about it — fall back to the
+    // off-radar buffer so the detail card opens and the user can see
+    // operator/route/photo on dimmed planes too.
+    const ac = store.get(hex) ?? getOffRadarAircraft(hex);
     if (!ac) return reply.code(404).send({ error: "not_found" });
     // Opening a flight is when we spend a (metered) AeroAPI query: upgrade the
     // route to a live flight plan. enrich() itself dedupes/rate-limits so

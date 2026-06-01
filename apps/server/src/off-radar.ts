@@ -1,5 +1,6 @@
 import type { Aircraft } from "@qdrn/shared";
 import { isAdsblolEnabled } from "./config.js";
+import { enrich } from "./enrichment.js";
 
 /**
  * adsb.lol fill-in feed. We don't try to compete with the Pi's own ADS-B
@@ -9,7 +10,10 @@ import { isAdsblolEnabled } from "./config.js";
  *
  * Pulls /v2/point/<lat>/<lon>/<distance_nm> every REFRESH_MS, dedupes
  * against the local feed by hex (local always wins), and returns the
- * remainder tagged `source: "adsblol"`.
+ * remainder tagged `source: "adsblol"`. Each plane also goes through the
+ * same enrich() pipeline as local readings so operator/type/route show up
+ * in the detail card and the airline logo / Frontier animal / popout
+ * filters work end-to-end.
  *
  * Disabled when adsb.lol is off (Settings → adsb.lol routes) so a single
  * toggle controls both routes + fill-in.
@@ -38,9 +42,13 @@ interface State {
   lastFetchAt: number;
   byHex: Map<string, { ac: Aircraft; seenAt: number }>;
   inflight: Promise<void> | null;
+  /** Hex+callsign pairs we've fired enrichment for so the same plane doesn't
+   *  re-trigger HTTP every refresh. enrich() also caches internally; this
+   *  just spares the repeat lookup overhead. */
+  enrichedFor: Map<string, string>;
 }
 
-const state: State = { lastFetchAt: 0, byHex: new Map(), inflight: null };
+const state: State = { lastFetchAt: 0, byHex: new Map(), inflight: null, enrichedFor: new Map() };
 
 /** Synchronously return the cached off-radar planes, refreshing in the
  *  background if the cache is stale. The poller calls this every snapshot
@@ -49,7 +57,7 @@ export function getOffRadarSnapshot(opts: {
   lat: number; lon: number; radiusNm: number;
 }): Aircraft[] {
   if (!isAdsblolEnabled()) {
-    if (state.byHex.size > 0) state.byHex.clear();
+    if (state.byHex.size > 0) { state.byHex.clear(); state.enrichedFor.clear(); }
     return [];
   }
   const now = Date.now();
@@ -60,9 +68,18 @@ export function getOffRadarSnapshot(opts: {
   }
   // Prune stale entries (plane drifted out of range / API returned fewer last fetch).
   for (const [hex, entry] of state.byHex) {
-    if (now - entry.seenAt > STALE_MS) state.byHex.delete(hex);
+    if (now - entry.seenAt > STALE_MS) {
+      state.byHex.delete(hex);
+      state.enrichedFor.delete(hex);
+    }
   }
   return [...state.byHex.values()].map((e) => e.ac);
+}
+
+/** Direct lookup so /aircraft/:hex can return off-radar planes too (the
+ *  local store doesn't know about them). */
+export function getOffRadarAircraft(hex: string): Aircraft | undefined {
+  return state.byHex.get(hex.toLowerCase())?.ac;
 }
 
 async function refresh(lat: number, lon: number, radiusNm: number): Promise<void> {
@@ -78,9 +95,11 @@ async function refresh(lat: number, lon: number, radiusNm: number): Promise<void
     for (const r of raw) {
       if (!r.hex || typeof r.lat !== "number" || typeof r.lon !== "number") continue;
       const hex = r.hex.toLowerCase();
+      const flight = r.flight?.trim();
+      const prev = state.byHex.get(hex)?.ac;
       const ac: Aircraft = {
         hex,
-        flight: r.flight?.trim(),
+        flight,
         lat: r.lat,
         lon: r.lon,
         altBaro: r.alt_baro,
@@ -91,8 +110,24 @@ async function refresh(lat: number, lon: number, radiusNm: number): Promise<void
         squawk: r.squawk,
         category: r.category,
         source: "adsblol",
+        // Carry the enrichment forward — adsb.lol gave us position only, but
+        // the cached operator/type/route is still valid for the same hex.
+        enrichment: prev?.enrichment,
       };
       state.byHex.set(hex, { ac, seenAt: now });
+
+      // Fire enrichment if we haven't yet for this (hex, callsign). The
+      // enrichment cache keeps repeats cheap; this just spares re-dispatch.
+      const cs = flight ?? "";
+      const lacksRoute = !ac.enrichment || (!ac.enrichment.route && cs.length > 0);
+      if (lacksRoute && state.enrichedFor.get(hex) !== cs) {
+        state.enrichedFor.set(hex, cs);
+        void enrich(hex, flight, { lat: r.lat, lon: r.lon, track: r.track }).then((e) => {
+          if (!e) return;
+          const cur = state.byHex.get(hex);
+          if (cur) cur.ac.enrichment = e;
+        });
+      }
     }
   } catch {
     /* swallow — best-effort feed */

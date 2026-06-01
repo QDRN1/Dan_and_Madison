@@ -366,19 +366,17 @@ const allStmt = db.prepare(`
   LEFT JOIN achievements p ON p.id = a.id
 `);
 
-// Make sure every defined achievement has a row from day one — the admin
-// device-info card reads COUNT(*) as the denominator, so unseeded rows
-// produce a misleading "0/0 earned".
-for (const def of DEFS) {
-  try { seedStmt.run(def.id); } catch { /* table not yet ready — first-run race */ }
-}
-// Drop orphaned rows from achievement IDs that no longer exist in DEFS
-// (renames, removed sentinels, etc.) so the table count stays in sync with
-// the static denominator.
+// Seed every defined achievement with count=0 and drop orphaned IDs from
+// past renames. Wrapped in one defensive block so a single startup blip
+// (table not ready, weird state from a partial migration, anything) can't
+// take the server down — but the error gets logged so it's diagnosable.
 try {
+  for (const def of DEFS) seedStmt.run(def.id);
   const placeholders = DEFS.map(() => "?").join(",");
   db.prepare(`DELETE FROM achievements WHERE id NOT IN (${placeholders})`).run(...DEFS.map((d) => d.id));
-} catch { /* ignore — first-run race */ }
+} catch (e) {
+  console.error("[achievements] seed/cleanup failed:", (e as Error).message);
+}
 
 /** Number of defined achievements — used as the authoritative denominator. */
 export const DEFINED_ACHIEVEMENTS = DEFS.length;

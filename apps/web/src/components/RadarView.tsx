@@ -113,14 +113,23 @@ function AltitudeLegendWrapper(): JSX.Element {
   return <AltitudeLegend hidden={!!selected} />;
 }
 
-/** Live tracking count pill in the topbar. Selectors are scoped to the count
- *  itself so other topbar UI doesn't re-render on every snapshot. Clicking it
- *  opens the In view popout. */
+/** Live tracking count pill in the topbar. Selectors are scoped narrowly so
+ *  other topbar UI doesn't re-render on every snapshot. Clicking opens the
+ *  In view popout. When the websocket goes stale/offline the pill flips to a
+ *  red "offline" state so the user knows the snapshot they're looking at is
+ *  frozen — a silent dead socket was a real foot-gun before. */
 function LiveCountPill({ onClick }: { onClick: () => void }): JSX.Element {
   const count = useRadar((s) => s.aircraft.filter((a) => a.lat != null).length);
+  const status = useRadar((s) => s.liveStatus);
+  const isLive = status === "live" || status === "connecting";
   return (
-    <button className="live glass live-pill" onClick={onClick} title="Show all aircraft in view" type="button">
-      <span className="dot" /> {count} <span className="muted" style={{ fontWeight: 600 }}>tracking</span>
+    <button
+      className={`live glass live-pill${isLive ? "" : " live-pill-offline"}`}
+      onClick={onClick}
+      title={isLive ? "Show all aircraft in view" : `Live feed ${status} — snapshot may be stale`}
+      type="button"
+    >
+      <span className="dot" /> {isLive ? count : "Offline"} <span className="muted" style={{ fontWeight: 600 }}>{isLive ? "tracking" : ""}</span>
     </button>
   );
 }

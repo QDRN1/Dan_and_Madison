@@ -16,6 +16,7 @@ function currentRoute(): Route {
 export function App(): JSX.Element {
   const setConfig = useRadar((s) => s.setConfig);
   const applySnapshot = useRadar((s) => s.applySnapshot);
+  const setLiveStatus = useRadar((s) => s.setLiveStatus);
   const config = useRadar((s) => s.config);
   const theme = useRadar((s) => s.theme);
   const [route, setRoute] = useState<Route>(currentRoute());
@@ -47,9 +48,9 @@ export function App(): JSX.Element {
   // Live feed only matters for the radar view.
   useEffect(() => {
     if (route !== "radar") return;
-    const disconnect = connectLive(applySnapshot);
+    const disconnect = connectLive(applySnapshot, setLiveStatus);
     return disconnect;
-  }, [route, applySnapshot]);
+  }, [route, applySnapshot, setLiveStatus]);
 
   // Apply + persist the light/dark theme globally.
   useEffect(() => {

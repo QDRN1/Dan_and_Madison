@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { Aircraft, LiveSnapshot, PublicConfig, SightingScope, SightingSort, TrailPoint } from "@qdrn/shared";
 
+export type LiveStatus = "connecting" | "live" | "stale" | "offline";
 export type Theme = "light" | "dark";
 export type IconTheme = "plane" | "paw" | "heart" | "ufo";
 
@@ -53,7 +54,9 @@ interface RadarState {
   iconTheme: IconTheme;
   stormOverlay: boolean;
   popout: PopoutState | null;
+  liveStatus: LiveStatus;
   setConfig: (c: PublicConfig) => void;
+  setLiveStatus: (s: LiveStatus) => void;
   applySnapshot: (s: LiveSnapshot) => void;
   select: (hex: string | null) => void;
   setSelectedTrail: (t: TrailPoint[] | null) => void;
@@ -78,8 +81,10 @@ export const useRadar = create<RadarState>((set, get) => ({
   iconTheme: initialIconTheme(),
   stormOverlay: initialStorm(),
   popout: null,
+  liveStatus: "connecting",
 
   setConfig: (config) => set({ config }),
+  setLiveStatus: (liveStatus) => set({ liveStatus }),
 
   applySnapshot: (s) => {
     const byHex: Record<string, Aircraft> = {};

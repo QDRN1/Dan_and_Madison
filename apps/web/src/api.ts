@@ -107,15 +107,29 @@ export const api = {
     post<{ ok: boolean; networks?: WifiScanResult[]; error?: string }>("/setup/wifi/scan", { pin }),
 };
 
-/** Connect to the live websocket, auto-reconnecting with backoff. */
-export function connectLive(onSnapshot: (s: LiveSnapshot) => void): () => void {
+export type LiveStatus = "connecting" | "live" | "stale" | "offline";
+
+/** Connect to the live websocket, auto-reconnecting with backoff. The
+ *  status callback is invoked whenever the connection transitions so the
+ *  UI can surface a "Offline" pill instead of silently showing stale data. */
+export function connectLive(
+  onSnapshot: (s: LiveSnapshot) => void,
+  onStatus?: (s: LiveStatus) => void,
+): () => void {
   let ws: WebSocket | null = null;
   let closed = false;
   let backoff = 1000;
   let lastMsg = Date.now();
+  let status: LiveStatus = "connecting";
   // Generation guard: a stale socket's late events can't reconnect or deliver
   // data once we've moved on to a newer connection.
   let gen = 0;
+
+  const setStatus = (s: LiveStatus): void => {
+    if (s === status) return;
+    status = s;
+    onStatus?.(s);
+  };
 
   const proto = location.protocol === "https:" ? "wss" : "ws";
   const url = `${proto}://${location.host}${API}/live`;
@@ -128,10 +142,12 @@ export function connectLive(onSnapshot: (s: LiveSnapshot) => void): () => void {
     if (closed) return;
     const myGen = ++gen;
     lastMsg = Date.now();
+    setStatus("connecting");
     ws = new WebSocket(url);
     ws.onmessage = (ev) => {
       if (myGen !== gen) return;
       lastMsg = Date.now();
+      setStatus("live");
       try {
         const msg = JSON.parse(ev.data);
         if (msg.type === "snapshot") onSnapshot(msg.data as LiveSnapshot);
@@ -144,6 +160,7 @@ export function connectLive(onSnapshot: (s: LiveSnapshot) => void): () => void {
     };
     ws.onclose = () => {
       if (closed || myGen !== gen) return;
+      setStatus(backoff >= 8000 ? "offline" : "stale");
       setTimeout(open, backoff);
       backoff = Math.min(backoff * 2, 15000);
     };
@@ -159,9 +176,9 @@ export function connectLive(onSnapshot: (s: LiveSnapshot) => void): () => void {
 
   const watchdog = setInterval(() => {
     if (closed) return;
-    if (Date.now() - lastMsg > STALE_MS) {
-      // open() bumps gen, neutralizing the old socket's handlers, so this can't
-      // double-connect even if the dead socket's onclose fires later.
+    const idle = Date.now() - lastMsg;
+    if (idle > STALE_MS) {
+      setStatus(idle > 30_000 ? "offline" : "stale");
       try {
         ws?.close();
       } catch {
