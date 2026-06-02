@@ -538,12 +538,15 @@ function OffRadarSection({
   );
 }
 
-/** User-managed flight-watch list. Add a callsign (e.g. DL2864) and the
- *  poller fires a big alert when that exact flight enters the radar. */
+/** User-managed flight-watch list. Add a name + callsign + (optional) date
+ *  and the poller fires a big alert when that exact flight enters the
+ *  radar — only on the specified date (or always, if blank). */
 function WatchesSection({ pin }: { pin: string }): JSX.Element {
   const [expanded, setExpanded] = useState(false);
   const [watches, setWatches] = useState<FlightWatch[]>([]);
-  const [draft, setDraft] = useState("");
+  const [draftName, setDraftName] = useState("");
+  const [draftCallsign, setDraftCallsign] = useState("");
+  const [draftDate, setDraftDate] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
 
@@ -554,18 +557,21 @@ function WatchesSection({ pin }: { pin: string }): JSX.Element {
   useEffect(() => {
     if (!expanded) return;
     void reload();
-    // Live re-poll while expanded so a fresh fire shows up without manual refresh.
     const t = setInterval(() => void reload(), 15_000);
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expanded, pin]);
 
   async function add(): Promise<void> {
-    if (!draft.trim()) return;
+    if (!draftCallsign.trim()) return;
     setBusy(true); setMsg("");
     try {
-      const r = await api.addWatch(pin, draft.trim());
-      if (r.ok) { setDraft(""); await reload(); }
+      const r = await api.addWatch(pin, {
+        callsign: draftCallsign.trim(),
+        name: draftName.trim() || undefined,
+        flightDate: draftDate || undefined,
+      });
+      if (r.ok) { setDraftName(""); setDraftCallsign(""); setDraftDate(""); await reload(); }
       else setMsg(r.error ?? "Couldn't add.");
     } finally { setBusy(false); }
   }
@@ -595,26 +601,48 @@ function WatchesSection({ pin }: { pin: string }): JSX.Element {
       {expanded && (
         <div style={{ marginTop: 10 }}>
           <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
-            Add a callsign (DL2864, AAL100, BAW286). When that exact flight
-            crosses the radar a big alert fires at the top and the plane is
-            selected on the map. IATA prefixes are auto-converted to ICAO,
-            so "DL" matches the "DAL" the receiver sees.
+            Give it a name (who's flying / what it's for), the callsign
+            (DL2864, AAL100, BAW286…), and the date. When that exact flight
+            crosses the radar on that day a big alert fires and the plane is
+            selected on the map. IATA prefixes auto-convert to ICAO. Leave
+            the date blank to watch indefinitely.
           </p>
-          <div style={{ display: "flex", gap: 8 }}>
+          <input
+            className="input"
+            placeholder="Name (e.g. Dan's flight to Vegas)"
+            value={draftName}
+            onChange={(e) => { setDraftName(e.target.value); setMsg(""); }}
+            maxLength={60}
+          />
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
             <input
               className="input"
               placeholder="DL2864"
-              value={draft}
-              onChange={(e) => { setDraft(e.target.value.toUpperCase()); setMsg(""); }}
+              value={draftCallsign}
+              onChange={(e) => { setDraftCallsign(e.target.value.toUpperCase()); setMsg(""); }}
               onKeyDown={(e) => e.key === "Enter" && void add()}
               autoCapitalize="characters"
               autoCorrect="off"
               spellCheck={false}
+              style={{ flex: 1 }}
             />
-            <button className="btn btn-primary" disabled={busy || !draft.trim()} onClick={() => void add()}>
-              {busy ? "…" : "Add"}
-            </button>
+            <input
+              className="input"
+              type="date"
+              value={draftDate}
+              onChange={(e) => { setDraftDate(e.target.value); setMsg(""); }}
+              style={{ flex: 1.2 }}
+              title="Date the flight is operating (optional)"
+            />
           </div>
+          <button
+            className="btn btn-primary btn-block"
+            style={{ marginTop: 8 }}
+            disabled={busy || !draftCallsign.trim()}
+            onClick={() => void add()}
+          >
+            {busy ? "Saving…" : "Add watch"}
+          </button>
           {msg && <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>{msg}</div>}
           {watches.length > 0 && (
             <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
@@ -623,16 +651,18 @@ function WatchesSection({ pin }: { pin: string }): JSX.Element {
                 return (
                   <div key={w.id} className="watch-row">
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 700 }}>
-                        {w.raw_input}
-                        {w.raw_input.toUpperCase() !== w.callsign && (
-                          <span className="muted" style={{ fontWeight: 500, marginLeft: 6, fontSize: 12 }}>({w.callsign})</span>
-                        )}
+                      <div style={{ fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {w.name || w.raw_input}
                       </div>
                       <div className="muted" style={{ fontSize: 11 }}>
+                        {w.raw_input}
+                        {w.raw_input.toUpperCase() !== w.callsign && <> ({w.callsign})</>}
+                        {w.flight_date && <> · {fmtFlightDate(w.flight_date)}</>}
+                      </div>
+                      <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
                         {isFired
-                          ? `Seen ${fmtAgo(w.fired_at!)} · hex ${w.fired_hex?.toUpperCase()}`
-                          : "Watching…"}
+                          ? `✓ Seen ${fmtAgo(w.fired_at!)} · hex ${w.fired_hex?.toUpperCase()}`
+                          : w.flight_date ? "Armed for the date" : "Watching…"}
                       </div>
                     </div>
                     {isFired && (
@@ -652,6 +682,15 @@ function WatchesSection({ pin }: { pin: string }): JSX.Element {
       )}
     </div>
   );
+}
+
+function fmtFlightDate(iso: string): string {
+  // iso = "YYYY-MM-DD". Build a Date at noon UTC so timezone fudging doesn't
+  // slide the displayed date by a day.
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d) return iso;
+  const dt = new Date(Date.UTC(y, m - 1, d, 12));
+  return dt.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
 }
 
 function fmtAgo(ts: number): string {

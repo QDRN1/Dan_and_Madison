@@ -215,6 +215,10 @@ export interface FlightWatch {
   callsign: string;
   /** Whatever the user typed (e.g. "DL2864"). */
   raw_input: string;
+  /** Friendly label — who or what this watch is for ("Dan's flight"). */
+  name: string | null;
+  /** YYYY-MM-DD the flight is expected. Null = any date (always armed). */
+  flight_date: string | null;
   note: string | null;
   created_at: number;
   expires_at: number | null;

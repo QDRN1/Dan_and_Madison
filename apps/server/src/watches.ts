@@ -1,4 +1,5 @@
 import type { Aircraft } from "@qdrn/shared";
+import { TIMEZONE } from "./config.js";
 import { db } from "./db.js";
 
 /**
@@ -45,6 +46,8 @@ export interface WatchRow {
   id: number;
   callsign: string;      // normalized
   raw_input: string;
+  name: string | null;
+  flight_date: string | null; // YYYY-MM-DD or null = any date
   note: string | null;
   created_at: number;
   expires_at: number | null;
@@ -54,8 +57,8 @@ export interface WatchRow {
 
 const listStmt = db.prepare(`SELECT * FROM watches ORDER BY created_at DESC`);
 const insertStmt = db.prepare(
-  `INSERT INTO watches (callsign, raw_input, note, created_at, expires_at)
-   VALUES (@callsign, @raw_input, @note, @created_at, @expires_at)`,
+  `INSERT INTO watches (callsign, raw_input, name, flight_date, note, created_at, expires_at)
+   VALUES (@callsign, @raw_input, @name, @flight_date, @note, @created_at, @expires_at)`,
 );
 const removeStmt = db.prepare(`DELETE FROM watches WHERE id = ?`);
 const fireStmt = db.prepare(
@@ -63,21 +66,35 @@ const fireStmt = db.prepare(
 );
 const clearFiredStmt = db.prepare(`UPDATE watches SET fired_at = NULL, fired_hex = NULL WHERE id = ?`);
 
+/** Day key in the configured timezone — same format as flight_date. */
+const dayFmt = new Intl.DateTimeFormat("en-CA", {
+  timeZone: TIMEZONE, year: "numeric", month: "2-digit", day: "2-digit",
+});
+function dayKey(d: Date): string { return dayFmt.format(d); }
+
 export function listWatches(): WatchRow[] {
   return listStmt.all() as WatchRow[];
 }
 
-export function addWatch(input: { raw: string; note?: string; expiresAt?: number }): WatchRow {
+export function addWatch(input: {
+  raw: string; name?: string; flightDate?: string; note?: string; expiresAt?: number;
+}): WatchRow {
   const callsign = normalizeCallsign(input.raw);
   if (!callsign) throw new Error("empty callsign");
-  insertStmt.run({
+  // Validate the date if provided (YYYY-MM-DD)
+  if (input.flightDate && !/^\d{4}-\d{2}-\d{2}$/.test(input.flightDate)) {
+    throw new Error("flight_date must be YYYY-MM-DD");
+  }
+  const r = insertStmt.run({
     callsign,
     raw_input: input.raw.trim(),
+    name: input.name?.trim() || null,
+    flight_date: input.flightDate ?? null,
     note: input.note ?? null,
     created_at: Date.now(),
     expires_at: input.expiresAt ?? null,
   });
-  return listWatches().find((w) => w.callsign === callsign)!;
+  return listStmt.all().find((w) => (w as WatchRow).id === Number(r.lastInsertRowid)) as WatchRow;
 }
 
 export function removeWatch(id: number): void {
@@ -88,26 +105,38 @@ export function clearWatchFire(id: number): void {
   clearFiredStmt.run(id);
 }
 
+/** True if the watch's flight_date is null or within ±1 day of "today" in
+ *  the configured timezone. The ±1 buffer covers late departures crossing
+ *  midnight and lets people add a watch the night before. */
+function dateMatchesToday(w: WatchRow, now: Date): boolean {
+  if (!w.flight_date) return true;
+  const today = dayKey(now);
+  if (w.flight_date === today) return true;
+  const day = 86_400_000;
+  return w.flight_date === dayKey(new Date(now.getTime() - day))
+      || w.flight_date === dayKey(new Date(now.getTime() + day));
+}
+
 /** Scan the current aircraft snapshot against the watch list. Returns
- *  newly-matching watches (callsign hit + not already fired against this hex).
- *  Caller is responsible for dispatching the alert + persisting the fire. */
+ *  newly-matching watches (callsign hit + not already fired against this hex
+ *  + date in window). Caller dispatches the alert + persists the fire. */
 export function checkWatches(aircraft: Aircraft[]): { watch: WatchRow; aircraft: Aircraft }[] {
   const watches = listWatches();
   if (watches.length === 0) return [];
-  const now = Date.now();
+  const nowMs = Date.now();
+  const nowDate = new Date(nowMs);
   const hits: { watch: WatchRow; aircraft: Aircraft }[] = [];
   for (const w of watches) {
-    if (w.expires_at && w.expires_at < now) continue;
+    if (w.expires_at && w.expires_at < nowMs) continue;
+    if (!dateMatchesToday(w, nowDate)) continue;
     for (const ac of aircraft) {
       const cs = (ac.flight ?? "").trim().toUpperCase().replace(/\s+/g, "");
       if (!cs) continue;
       if (cs !== w.callsign) continue;
       // De-dupe: if the watch already fired against this exact hex, skip.
-      // (re-fires only when a different airframe matches or the user
-      // clears the fired state via the UI).
       if (w.fired_hex === ac.hex) continue;
-      fireStmt.run({ id: w.id, fired_at: now, fired_hex: ac.hex });
-      hits.push({ watch: { ...w, fired_at: now, fired_hex: ac.hex }, aircraft: ac });
+      fireStmt.run({ id: w.id, fired_at: nowMs, fired_hex: ac.hex });
+      hits.push({ watch: { ...w, fired_at: nowMs, fired_hex: ac.hex }, aircraft: ac });
     }
   }
   return hits;

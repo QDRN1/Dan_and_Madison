@@ -302,14 +302,20 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
     if (!pinOk(req.body?.pin)) return reply.code(401).send({ error: "bad_pin" });
     return { watches: listWatches() };
   });
-  app.post<{ Body: { pin?: string; callsign?: string; note?: string; expiresAt?: number } }>(
+  app.post<{ Body: { pin?: string; callsign?: string; name?: string; flightDate?: string; note?: string; expiresAt?: number } }>(
     "/setup/watches/add",
     async (req, reply) => {
       if (!pinOk(req.body?.pin)) return reply.code(401).send({ error: "bad_pin" });
       const raw = (req.body?.callsign ?? "").trim();
       if (!raw) return reply.code(400).send({ error: "callsign_required" });
       try {
-        const w = addWatch({ raw, note: req.body?.note, expiresAt: req.body?.expiresAt });
+        const w = addWatch({
+          raw,
+          name: req.body?.name,
+          flightDate: req.body?.flightDate,
+          note: req.body?.note,
+          expiresAt: req.body?.expiresAt,
+        });
         return { ok: true, watch: w };
       } catch (e) {
         return reply.code(400).send({ ok: false, error: (e as Error).message });

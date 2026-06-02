@@ -80,13 +80,15 @@ db.exec(`
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     callsign    TEXT NOT NULL,        -- normalized upper-case ICAO form
     raw_input   TEXT NOT NULL,        -- what the user typed
+    name        TEXT,                 -- who / what the watch is for ("Dan's flight")
+    flight_date TEXT,                 -- YYYY-MM-DD; null = any date
     note        TEXT,
     created_at  INTEGER NOT NULL,
     expires_at  INTEGER,              -- epoch ms or NULL for indefinite
     fired_at    INTEGER,              -- when this watch last matched
     fired_hex   TEXT                  -- the hex that matched (for re-open)
   );
-  CREATE UNIQUE INDEX IF NOT EXISTS idx_watches_callsign ON watches(callsign);
+  CREATE INDEX IF NOT EXISTS idx_watches_callsign ON watches(callsign);
 `);
 
 // Lazy column adds — older DBs predate the route columns. ALTER TABLE ADD COLUMN
@@ -99,6 +101,14 @@ function ensureColumn(table: string, column: string, type: string): void {
 ensureColumn("sightings", "origin_icao", "TEXT");
 ensureColumn("sightings", "dest_icao", "TEXT");
 ensureColumn("sightings", "route_source", "TEXT");
+// Watches gained "name" (who/what the watch is for) and "flight_date"
+// (YYYY-MM-DD when the flight is expected) after the initial schema.
+ensureColumn("watches", "name", "TEXT");
+ensureColumn("watches", "flight_date", "TEXT");
+// The original UNIQUE(callsign) blocked re-using a callsign for different
+// dates (DL2864 today + DL2864 next month should be two separate watches).
+// Drop it if it's there; the app dedupes by (callsign, flight_date).
+try { db.exec("DROP INDEX IF EXISTS idx_watches_callsign"); } catch { /* ignore */ }
 db.exec(`CREATE INDEX IF NOT EXISTS idx_sightings_operator ON sightings(operator);`);
 
 const getStmt = db.prepare<[string]>("SELECT value FROM settings WHERE key = ?");

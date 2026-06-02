@@ -109,8 +109,8 @@ export const api = {
     post<{ ok: boolean; networks?: WifiScanResult[]; error?: string }>("/setup/wifi/scan", { pin }),
   // Flight watches
   listWatches: (pin: string) => post<{ watches: FlightWatch[] }>("/setup/watches", { pin }),
-  addWatch: (pin: string, callsign: string, note?: string, expiresAt?: number) =>
-    post<{ ok: boolean; watch?: FlightWatch; error?: string }>("/setup/watches/add", { pin, callsign, note, expiresAt }),
+  addWatch: (pin: string, input: { callsign: string; name?: string; flightDate?: string; note?: string; expiresAt?: number }) =>
+    post<{ ok: boolean; watch?: FlightWatch; error?: string }>("/setup/watches/add", { pin, ...input }),
   removeWatch: (pin: string, id: number) =>
     post<{ ok: boolean }>("/setup/watches/remove", { pin, id }),
   clearWatchFire: (pin: string, id: number) =>
