@@ -1381,3 +1381,56 @@
  * earned tiles so they don't feel "unclickable" when they very much are. */
 .ach[aria-disabled="true"] { cursor: default; }
 .ach { cursor: pointer; }
+
+/* ─── Flight watch alert + Settings rows ──────────────────────────────── */
+.watch-alert {
+  position: absolute;
+  top: calc(58px + env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  background: linear-gradient(135deg, #ffb300, #ff4d4d);
+  color: #1a0a00;
+  border-radius: 16px;
+  border: 2px solid #fff;
+  font-weight: 700;
+  cursor: pointer;
+  max-width: calc(100vw - 24px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  animation: watch-alert-pop 0.4s ease-out, watch-alert-pulse 1.6s ease-in-out 0.4s infinite;
+}
+.watch-alert-icon { font-size: 32px; line-height: 1; }
+.watch-alert-text { display: flex; flex-direction: column; min-width: 0; }
+.watch-alert-title { font-size: 16px; font-weight: 900; letter-spacing: 0.02em; }
+.watch-alert-sub { font-size: 12px; font-weight: 600; opacity: 0.85; overflow: hidden; text-overflow: ellipsis; }
+.watch-alert .iconbtn {
+  background: rgba(0, 0, 0, 0.18);
+  border-color: transparent;
+  color: #1a0a00;
+  margin-left: 4px;
+}
+@keyframes watch-alert-pop {
+  from { transform: translate(-50%, -30px) scale(0.9); opacity: 0; }
+  to   { transform: translate(-50%, 0)     scale(1);   opacity: 1; }
+}
+@keyframes watch-alert-pulse {
+  0%, 100% { box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5), 0 0 0 0 rgba(255, 200, 0, 0.6); }
+  50%      { box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5), 0 0 0 18px rgba(255, 200, 0, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .watch-alert { animation: watch-alert-pop 0.2s ease-out; }
+}
+
+.watch-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--input-bg);
+}

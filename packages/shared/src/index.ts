@@ -208,6 +208,26 @@ export interface SightingPage {
   airlines: { name: string; count: number }[];
 }
 
+/** A user-pinned callsign to alert on when it enters the radar. */
+export interface FlightWatch {
+  id: number;
+  /** Normalized ICAO-style callsign used for the match (e.g. "DAL2864"). */
+  callsign: string;
+  /** Whatever the user typed (e.g. "DL2864"). */
+  raw_input: string;
+  note: string | null;
+  created_at: number;
+  expires_at: number | null;
+  fired_at: number | null;
+  fired_hex: string | null;
+}
+
+/** Fired by the server over the websocket when a watch matches a live plane. */
+export interface FlightWatchHit {
+  watch: FlightWatch;
+  aircraft: Aircraft;
+}
+
 /** Definition of an achievement badge (server-side; sent to the UI). */
 export interface AchievementDef {
   id: string;

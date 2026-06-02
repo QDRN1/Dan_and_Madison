@@ -64,6 +64,7 @@ import { backfillAchievements, diagnoseAchievements } from "../achievements.js";
 import { deriveFreeRouteTimes } from "../derived-times.js";
 import { fetchExtendedTrack } from "../extended-track.js";
 import { getOffRadarAircraft } from "../off-radar.js";
+import { addWatch, clearWatchFire, listWatches, removeWatch } from "../watches.js";
 import { applyFeedersInBackground, writeFeederEnv } from "../feeder.js";
 import { store } from "../poller.js";
 import { getStats, listAllTime, listFarthest, listNotable, listSightings, listToday } from "../stats.js";
@@ -294,6 +295,38 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
     if (typeof req.body?.enabled !== "boolean") return reply.code(400).send({ error: "bad_request" });
     setOffRadarEnabled(req.body.enabled);
     return { ok: true, enabled: isOffRadarEnabled() };
+  });
+
+  // ── Flight watches (pinned callsigns the user wants alerted on) ────────
+  app.post<{ Body: { pin?: string } }>("/setup/watches", async (req, reply) => {
+    if (!pinOk(req.body?.pin)) return reply.code(401).send({ error: "bad_pin" });
+    return { watches: listWatches() };
+  });
+  app.post<{ Body: { pin?: string; callsign?: string; note?: string; expiresAt?: number } }>(
+    "/setup/watches/add",
+    async (req, reply) => {
+      if (!pinOk(req.body?.pin)) return reply.code(401).send({ error: "bad_pin" });
+      const raw = (req.body?.callsign ?? "").trim();
+      if (!raw) return reply.code(400).send({ error: "callsign_required" });
+      try {
+        const w = addWatch({ raw, note: req.body?.note, expiresAt: req.body?.expiresAt });
+        return { ok: true, watch: w };
+      } catch (e) {
+        return reply.code(400).send({ ok: false, error: (e as Error).message });
+      }
+    },
+  );
+  app.post<{ Body: { pin?: string; id?: number } }>("/setup/watches/remove", async (req, reply) => {
+    if (!pinOk(req.body?.pin)) return reply.code(401).send({ error: "bad_pin" });
+    if (typeof req.body?.id !== "number") return reply.code(400).send({ error: "id_required" });
+    removeWatch(req.body.id);
+    return { ok: true };
+  });
+  app.post<{ Body: { pin?: string; id?: number } }>("/setup/watches/clear-fire", async (req, reply) => {
+    if (!pinOk(req.body?.pin)) return reply.code(401).send({ error: "bad_pin" });
+    if (typeof req.body?.id !== "number") return reply.code(400).send({ error: "id_required" });
+    clearWatchFire(req.body.id);
+    return { ok: true };
   });
 
   app.post<{ Body: { pin?: string; enabled?: boolean } }>("/setup/adsblol", async (req, reply) => {

@@ -42,4 +42,19 @@ export function setupWebsocket(app: FastifyInstance): void {
       }
     }
   });
+
+  // Push flight-watch alerts to every connected client. Same delivery path
+  // as snapshots so a stale/dropped socket doesn't get a misleading hit.
+  store.on("watch_hit", (hit) => {
+    if (clients.size === 0) return;
+    const msg = JSON.stringify({ type: "watch_hit", data: hit });
+    for (const c of clients) {
+      try {
+        if (c.readyState === c.OPEN) c.send(msg);
+        else clients.delete(c);
+      } catch {
+        clients.delete(c);
+      }
+    }
+  });
 }

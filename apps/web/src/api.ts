@@ -1,4 +1,4 @@
-import type { AchievementProgress, AdminSettings, Aircraft, Connections, CoveragePoint, FlaggedSighting, LiveSnapshot, PublicConfig, SetupState, SightingFilter, SightingPage, SightingRow, Stats, WifiNetwork, WifiScanResult } from "@qdrn/shared";
+import type { AchievementProgress, AdminSettings, Aircraft, Connections, CoveragePoint, FlaggedSighting, FlightWatch, FlightWatchHit, LiveSnapshot, PublicConfig, SetupState, SightingFilter, SightingPage, SightingRow, Stats, WifiNetwork, WifiScanResult } from "@qdrn/shared";
 
 // Vite injects the configured base path (e.g. "/md/"); strip the trailing slash.
 export const BASE = import.meta.env.BASE_URL.replace(/\/+$/, "");
@@ -107,6 +107,14 @@ export const api = {
     post<{ ok: boolean; error?: string }>("/setup/wifi/connect", { pin, ...target }),
   wifiScan: (pin: string) =>
     post<{ ok: boolean; networks?: WifiScanResult[]; error?: string }>("/setup/wifi/scan", { pin }),
+  // Flight watches
+  listWatches: (pin: string) => post<{ watches: FlightWatch[] }>("/setup/watches", { pin }),
+  addWatch: (pin: string, callsign: string, note?: string, expiresAt?: number) =>
+    post<{ ok: boolean; watch?: FlightWatch; error?: string }>("/setup/watches/add", { pin, callsign, note, expiresAt }),
+  removeWatch: (pin: string, id: number) =>
+    post<{ ok: boolean }>("/setup/watches/remove", { pin, id }),
+  clearWatchFire: (pin: string, id: number) =>
+    post<{ ok: boolean }>("/setup/watches/clear-fire", { pin, id }),
 };
 
 export type LiveStatus = "connecting" | "live" | "stale" | "offline";
@@ -117,6 +125,7 @@ export type LiveStatus = "connecting" | "live" | "stale" | "offline";
 export function connectLive(
   onSnapshot: (s: LiveSnapshot) => void,
   onStatus?: (s: LiveStatus) => void,
+  onWatchHit?: (h: FlightWatchHit) => void,
 ): () => void {
   let ws: WebSocket | null = null;
   let closed = false;
@@ -153,6 +162,7 @@ export function connectLive(
       try {
         const msg = JSON.parse(ev.data);
         if (msg.type === "snapshot") onSnapshot(msg.data as LiveSnapshot);
+        else if (msg.type === "watch_hit") onWatchHit?.(msg.data as FlightWatchHit);
       } catch {
         /* ignore */
       }

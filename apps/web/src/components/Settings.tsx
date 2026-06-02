@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { AdminSettings, ConnStatus, Connections, GatewayInfo, WifiNetwork, WifiScanResult } from "@qdrn/shared";
+import type { AdminSettings, ConnStatus, Connections, FlightWatch, GatewayInfo, WifiNetwork, WifiScanResult } from "@qdrn/shared";
 import { BASE, api, cityCenter, geocodeCity, type GeoResult } from "../api";
 import { useRadar, type IconTheme } from "../store";
 
@@ -144,6 +144,9 @@ export function Settings(): JSX.Element {
 
       {/* 5. "Not on my radar" — adsb.lol fill-in for planes outside reception */}
       <OffRadarSection pin={pin} enabled={s.offRadarEnabled} onChanged={() => void load(pin)} />
+
+      {/* 5b. Flight watches (custom alerts on a specific callsign) */}
+      <WatchesSection pin={pin} />
 
       {/* 6. Shared API gateway */}
       <GatewaySection pin={pin} gateway={s.gateway} status={conn?.gateway} info={conn?.gatewayInfo} onSaved={() => void load(pin)} />
@@ -533,6 +536,132 @@ function OffRadarSection({
       )}
     </div>
   );
+}
+
+/** User-managed flight-watch list. Add a callsign (e.g. DL2864) and the
+ *  poller fires a big alert when that exact flight enters the radar. */
+function WatchesSection({ pin }: { pin: string }): JSX.Element {
+  const [expanded, setExpanded] = useState(false);
+  const [watches, setWatches] = useState<FlightWatch[]>([]);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const reload = async (): Promise<void> => {
+    try { const r = await api.listWatches(pin); setWatches(r.watches ?? []); }
+    catch { /* offline */ }
+  };
+  useEffect(() => {
+    if (!expanded) return;
+    void reload();
+    // Live re-poll while expanded so a fresh fire shows up without manual refresh.
+    const t = setInterval(() => void reload(), 15_000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded, pin]);
+
+  async function add(): Promise<void> {
+    if (!draft.trim()) return;
+    setBusy(true); setMsg("");
+    try {
+      const r = await api.addWatch(pin, draft.trim());
+      if (r.ok) { setDraft(""); await reload(); }
+      else setMsg(r.error ?? "Couldn't add.");
+    } finally { setBusy(false); }
+  }
+  async function remove(id: number): Promise<void> {
+    setBusy(true);
+    try { await api.removeWatch(pin, id); await reload(); } finally { setBusy(false); }
+  }
+  async function reArm(id: number): Promise<void> {
+    setBusy(true);
+    try { await api.clearWatchFire(pin, id); await reload(); } finally { setBusy(false); }
+  }
+
+  const active = watches.filter((w) => !w.expires_at || w.expires_at > Date.now()).length;
+  const fired = watches.filter((w) => w.fired_at).length;
+
+  return (
+    <div className="set-card">
+      <button className="set-collapse-head" onClick={() => setExpanded((v) => !v)} aria-expanded={expanded}>
+        <span style={{ flex: 1, textAlign: "left", fontWeight: 700, fontSize: 13, letterSpacing: 0.3, textTransform: "uppercase", color: "var(--muted)" }}>
+          Watch a flight
+        </span>
+        <span className="muted" style={{ fontSize: 12, marginRight: 8 }}>
+          {watches.length === 0 ? "none" : `${active} watching${fired ? ` · ${fired} hit` : ""}`}
+        </span>
+        <span className="set-collapse-chev" style={{ transform: expanded ? "rotate(90deg)" : "none" }}>›</span>
+      </button>
+      {expanded && (
+        <div style={{ marginTop: 10 }}>
+          <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
+            Add a callsign (DL2864, AAL100, BAW286). When that exact flight
+            crosses the radar a big alert fires at the top and the plane is
+            selected on the map. IATA prefixes are auto-converted to ICAO,
+            so "DL" matches the "DAL" the receiver sees.
+          </p>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input
+              className="input"
+              placeholder="DL2864"
+              value={draft}
+              onChange={(e) => { setDraft(e.target.value.toUpperCase()); setMsg(""); }}
+              onKeyDown={(e) => e.key === "Enter" && void add()}
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
+            />
+            <button className="btn btn-primary" disabled={busy || !draft.trim()} onClick={() => void add()}>
+              {busy ? "…" : "Add"}
+            </button>
+          </div>
+          {msg && <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>{msg}</div>}
+          {watches.length > 0 && (
+            <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
+              {watches.map((w) => {
+                const isFired = Boolean(w.fired_at);
+                return (
+                  <div key={w.id} className="watch-row">
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700 }}>
+                        {w.raw_input}
+                        {w.raw_input.toUpperCase() !== w.callsign && (
+                          <span className="muted" style={{ fontWeight: 500, marginLeft: 6, fontSize: 12 }}>({w.callsign})</span>
+                        )}
+                      </div>
+                      <div className="muted" style={{ fontSize: 11 }}>
+                        {isFired
+                          ? `Seen ${fmtAgo(w.fired_at!)} · hex ${w.fired_hex?.toUpperCase()}`
+                          : "Watching…"}
+                      </div>
+                    </div>
+                    {isFired && (
+                      <button className="btn" style={{ padding: "4px 8px", fontSize: 11 }} disabled={busy} onClick={() => void reArm(w.id)}>
+                        Re-arm
+                      </button>
+                    )}
+                    <button className="btn" style={{ padding: "4px 8px", fontSize: 11 }} disabled={busy} onClick={() => void remove(w.id)}>
+                      Remove
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function fmtAgo(ts: number): string {
+  const s = Math.round((Date.now() - ts) / 1000);
+  if (s < 60) return `${s}s ago`;
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.round(h / 24)}d ago`;
 }
 
 const ICON_CHOICES: { id: IconTheme; emoji: string; label: string; sub: string }[] = [

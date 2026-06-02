@@ -72,6 +72,21 @@ db.exec(`
 
   -- Faster sighting queries for the popout lists.
   CREATE INDEX IF NOT EXISTS idx_sightings_dist ON sightings(max_dist_nm DESC);
+
+  -- User-managed flight watches. Each row is a callsign to alert on when a
+  -- matching aircraft enters the radar. Matched by normalized callsign so
+  -- IATA-style entries like "DL2864" match the ADS-B "DAL2864" feed.
+  CREATE TABLE IF NOT EXISTS watches (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    callsign    TEXT NOT NULL,        -- normalized upper-case ICAO form
+    raw_input   TEXT NOT NULL,        -- what the user typed
+    note        TEXT,
+    created_at  INTEGER NOT NULL,
+    expires_at  INTEGER,              -- epoch ms or NULL for indefinite
+    fired_at    INTEGER,              -- when this watch last matched
+    fired_hex   TEXT                  -- the hex that matched (for re-open)
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_watches_callsign ON watches(callsign);
 `);
 
 // Lazy column adds — older DBs predate the route columns. ALTER TABLE ADD COLUMN

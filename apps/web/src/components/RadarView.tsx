@@ -14,6 +14,7 @@ import { Settings } from "./Settings";
 import { SightingsPopout } from "./SightingsPopout";
 import { ThemeToggle } from "./ThemeToggle";
 import { Toasts } from "./Toasts";
+import { WatchAlert } from "./WatchAlert";
 
 type Panel = "flights" | "stats" | "achievements" | "settings";
 
@@ -99,6 +100,7 @@ export function RadarView(): JSX.Element {
       <Toasts />
       <SightingsPopout />
       <AltitudeLegendWrapper />
+      <WatchAlert />
     </div>
   );
 }

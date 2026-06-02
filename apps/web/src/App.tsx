@@ -17,6 +17,8 @@ export function App(): JSX.Element {
   const setConfig = useRadar((s) => s.setConfig);
   const applySnapshot = useRadar((s) => s.applySnapshot);
   const setLiveStatus = useRadar((s) => s.setLiveStatus);
+  const setWatchHit = useRadar((s) => s.setWatchHit);
+  const select = useRadar((s) => s.select);
   const config = useRadar((s) => s.config);
   const theme = useRadar((s) => s.theme);
   const [route, setRoute] = useState<Route>(currentRoute());
@@ -48,9 +50,14 @@ export function App(): JSX.Element {
   // Live feed only matters for the radar view.
   useEffect(() => {
     if (route !== "radar") return;
-    const disconnect = connectLive(applySnapshot, setLiveStatus);
+    const disconnect = connectLive(applySnapshot, setLiveStatus, (hit) => {
+      setWatchHit(hit);
+      // Auto-select the matched plane so the map snaps to it; the alert
+      // banner is dismiss-on-click and stays up until acknowledged.
+      select(hit.aircraft.hex);
+    });
     return disconnect;
-  }, [route, applySnapshot, setLiveStatus]);
+  }, [route, applySnapshot, setLiveStatus, setWatchHit, select]);
 
   // Apply + persist the light/dark theme globally.
   useEffect(() => {

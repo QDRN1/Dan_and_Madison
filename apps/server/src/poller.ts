@@ -7,6 +7,7 @@ import { bearing, distanceNm } from "./geo.js";
 import { isFlagged, pruneOldSightings, recordSighting } from "./stats.js";
 import { isOffRadarEnabled } from "./config.js";
 import { getOffRadarSnapshot } from "./off-radar.js";
+import { checkWatches } from "./watches.js";
 
 const TRAIL_MAX_POINTS = 250;
 const TRAIL_MAX_AGE_MS = 45 * 60 * 1000;
@@ -189,7 +190,20 @@ class AircraftStore extends EventEmitter {
       }
     }
 
-    this.emit("snapshot", this.getSnapshot());
+    const snapshot = this.getSnapshot();
+    this.emit("snapshot", snapshot);
+
+    // Flight-watch fires: scan the live aircraft against the user's watch
+    // list. checkWatches dedupes against last-fired hex so each match only
+    // emits once per appearance. Listeners (the websocket) push a
+    // "watch_hit" frame so clients can toast immediately.
+    try {
+      for (const hit of checkWatches(snapshot.aircraft)) {
+        this.emit("watch_hit", hit);
+      }
+    } catch (e) {
+      console.error("[poller] watch check failed:", (e as Error).message);
+    }
 
     // Cheap, throttled inside (at most once/hr): keep the sightings table
     // from growing unbounded by deleting rows older than the retention window.
