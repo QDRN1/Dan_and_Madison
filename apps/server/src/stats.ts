@@ -15,6 +15,13 @@ import { db } from "./db.js";
 const SIGHTING_KEEP_DAYS = Number(process.env.SIGHTING_KEEP_DAYS) > 0
   ? Number(process.env.SIGHTING_KEEP_DAYS)
   : 365;
+/** Hard cap on the sightings table to keep the SD card safe on a runaway
+ *  day. At ~200 bytes/row this is ~125 MB max, well under any reasonable
+ *  SD card budget. Trips before the 365-day window only at very heavy
+ *  reception (5,000+ unique aircraft/day). */
+const SIGHTING_MAX_ROWS = Number(process.env.SIGHTING_MAX_ROWS) > 0
+  ? Number(process.env.SIGHTING_MAX_ROWS)
+  : 500_000;
 
 /** Read the Pi's SoC temperature in °C from the thermal sysfs node. Best-effort:
  *  returns undefined on non-Linux/non-Pi or if the node isn't reachable. */
@@ -394,18 +401,31 @@ export function listNotable(limit = 100): FlaggedSighting[] {
 
 let lastPruneAt = 0;
 
-/** Trim sightings older than SIGHTING_KEEP_DAYS. Cheap (single DELETE on an
- *  indexed column) and runs at most once an hour, kicked from the poller. */
+/** Trim sightings older than SIGHTING_KEEP_DAYS AND apply a hard row cap.
+ *  Cheap (indexed DELETEs) and runs at most once an hour, kicked from the
+ *  poller. The row cap is a safety net so even pathological reception can't
+ *  fill the SD card — we keep the most-recent N rows and drop the rest. */
 export function pruneOldSightings(): void {
   const now = Date.now();
   if (now - lastPruneAt < 60 * 60 * 1000) return;
   lastPruneAt = now;
   try {
+    // 1. Time-based: drop anything older than the retention window.
     const cutoff = new Date(now - SIGHTING_KEEP_DAYS * 86_400_000);
     const cutoffDay = dayFmt.format(cutoff);
     db.prepare("DELETE FROM sightings WHERE day < ?").run(cutoffDay);
     db.prepare("DELETE FROM flagged   WHERE at  < ?").run(now - SIGHTING_KEEP_DAYS * 86_400_000);
-  } catch {
-    /* best-effort */
+
+    // 2. Row-cap: if the table is still over budget after the day prune
+    // (sustained heavy reception), drop the oldest rows by last_seen.
+    const total = (db.prepare("SELECT COUNT(*) n FROM sightings").get() as { n: number }).n;
+    if (total > SIGHTING_MAX_ROWS) {
+      const over = total - SIGHTING_MAX_ROWS;
+      db.prepare(`DELETE FROM sightings WHERE rowid IN (
+        SELECT rowid FROM sightings ORDER BY last_seen ASC LIMIT ?
+      )`).run(over);
+    }
+  } catch (e) {
+    console.error("[stats] pruneOldSightings failed:", (e as Error).message);
   }
 }

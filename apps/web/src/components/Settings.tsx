@@ -125,10 +125,30 @@ export function Settings(): JSX.Element {
 
   return (
     <div className="scroll" style={{ flex: 1, display: "flex", flexDirection: "column", gap: 14 }}>
-      {/* Pilot name */}
+      {/* 1. WiFi */}
+      <WifiSection pin={pin} />
+
+      {/* 2. Pilot name */}
       <NameEditor pin={pin} initial={s.pilotName} onSaved={() => void refreshConfig()} />
 
-      {/* Connection pills */}
+      {/* 3. Location — standalone (was nested in Connections) */}
+      <LocationSection
+        pin={pin}
+        city={s.receiver.city}
+        county={s.receiver.county}
+        onSaved={async () => { await load(pin); await refreshConfig(); }}
+      />
+
+      {/* 4. Map plane icon (Theme) */}
+      <IconThemeSection />
+
+      {/* 5. "Not on my radar" — adsb.lol fill-in for planes outside reception */}
+      <OffRadarSection pin={pin} enabled={s.offRadarEnabled} onChanged={() => void load(pin)} />
+
+      {/* 6. Shared API gateway */}
+      <GatewaySection pin={pin} gateway={s.gateway} status={conn?.gateway} info={conn?.gatewayInfo} onSaved={() => void load(pin)} />
+
+      {/* 7. Connections — flat, never collapsed (adsb.lol pinned on top) */}
       <div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div className="label">Connections</div>
@@ -136,13 +156,13 @@ export function Settings(): JSX.Element {
             {checking ? "Checking…" : "Re-check"}
           </button>
         </div>
-        <LocationPill
+        <AdsblolPill
           pin={pin}
-          city={s.receiver.city}
-          county={s.receiver.county}
-          expanded={open === "location"}
-          onToggle={() => setOpen(open === "location" ? null : "location")}
-          onSaved={async () => { await load(pin); await refreshConfig(); setOpen(null); }}
+          enabled={s.adsblolEnabled}
+          status={conn?.adsblol}
+          expanded={open === "adsblol"}
+          onToggle={() => setOpen(open === "adsblol" ? null : "adsblol")}
+          onChanged={() => void load(pin)}
         />
         {KEY_FIELDS.map(({ field, label, feeder }) => (
           <KeyPill
@@ -158,28 +178,13 @@ export function Settings(): JSX.Element {
         ))}
       </div>
 
-      {/* Map plane icon theme (client-only easter egg) */}
-      <IconThemeSection />
-
-      {/* Saved WiFi networks */}
-      <WifiSection pin={pin} />
-
-      {/* Shared API gateway */}
-      <GatewaySection pin={pin} gateway={s.gateway} status={conn?.gateway} info={conn?.gatewayInfo} onSaved={() => void load(pin)} />
-
-      {/* adsb.lol — free position-aware route source */}
-      <AdsblolSection pin={pin} enabled={s.adsblolEnabled} status={conn?.adsblol} onChanged={() => void load(pin)} />
-
-      {/* "Not on my radar" — adsb.lol fill-in for planes outside reception */}
-      <OffRadarSection pin={pin} enabled={s.offRadarEnabled} onChanged={() => void load(pin)} />
-
-      {/* AeroAPI usage + spend guard (direct mode; the gateway meters its own) */}
+      {/* 8. AeroAPI usage + spend guard (direct mode; the gateway meters its own) */}
       {!(s.gateway.url && s.gateway.key) && <AeroSection pin={pin} aero={s.aero} onChanged={() => void load(pin)} />}
 
       {/* Owner-only admin (master PIN) */}
       {isMaster && <AdminSection pin={pin} />}
 
-      {/* Change PIN */}
+      {/* 9. Change PIN */}
       <PinSection currentPin={pin} onChanged={(p) => { sessionStorage.setItem(PIN_KEY, p); setPin(p); }} />
     </div>
   );
@@ -216,6 +221,53 @@ function NameEditor({ pin, initial, onSaved }: { pin: string; initial: string; o
           <button className="btn" onClick={async () => { await api.saveName(pin, name); setSaved(true); onSaved(); }}>
             {saved ? "Saved ✓" : "Save"}
           </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Standalone collapsible Location card (was nested under Connections as a
+ *  pill, but the user wants it as a top-level item so its current city is
+ *  always visible without expanding Connections). */
+function LocationSection({
+  pin, city, county, onSaved,
+}: { pin: string; city: string; county?: string; onSaved: () => void }): JSX.Element {
+  const [expanded, setExpanded] = useState(false);
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState<GeoResult[]>([]);
+  return (
+    <div className="set-card">
+      <button className="set-collapse-head" onClick={() => setExpanded((v) => !v)} aria-expanded={expanded}>
+        <span style={{ flex: 1, textAlign: "left", fontWeight: 700, fontSize: 13, letterSpacing: 0.3, textTransform: "uppercase", color: "var(--muted)" }}>
+          Location
+        </span>
+        <span className="muted" style={{ fontSize: 12, marginRight: 8, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {city}{county ? ` · ${county}` : ""}
+        </span>
+        <span className="set-collapse-chev" style={{ transform: expanded ? "rotate(90deg)" : "none" }}>›</span>
+      </button>
+      {expanded && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input className="input" placeholder="Address or city (we center on the nearest town)" value={q}
+              onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && q.trim().length >= 2 && geocodeCity(q.trim()).then(setResults)} />
+            <button className="btn" onClick={() => q.trim().length >= 2 && geocodeCity(q.trim()).then(setResults)}>Search</button>
+          </div>
+          {results.map((r) => (
+            <button key={`${r.lat},${r.lon}`} className="btn set-result"
+              onClick={async () => {
+                const center = r.city ? await cityCenter(r.city, r.state) : null;
+                const lat = Math.round((center?.lat ?? r.lat) * 100) / 100;
+                const lon = Math.round((center?.lon ?? r.lon) * 100) / 100;
+                await api.saveLocation(pin, r.label, lat, lon, r.county);
+                setExpanded(false);
+                onSaved();
+              }}>
+              {r.name}
+            </button>
+          ))}
         </div>
       )}
     </div>
@@ -287,6 +339,52 @@ function KeyPill({
         <div className="set-pill-body">
           <input className="input" placeholder="Paste value" value={draft} onChange={(e) => setDraft(e.target.value)} />
           <button className="btn btn-primary" style={{ marginTop: 8 }} onClick={() => void onSave(draft.trim())}>Save</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** adsb.lol pinned to the top of Connections. Same row layout as KeyPill so
+ *  the list reads as a single column of services; on expand the body is a
+ *  short paragraph + an on/off toggle (no key to paste). */
+function AdsblolPill({
+  pin, enabled, status, expanded, onToggle, onChanged,
+}: {
+  pin: string;
+  enabled: boolean;
+  status: ConnStatus | undefined;
+  expanded: boolean;
+  onToggle: () => void;
+  onChanged: () => void;
+}): JSX.Element {
+  const [busy, setBusy] = useState(false);
+  const st = ADSB_STATUS[status ?? (enabled ? "unknown" : "unset")];
+  return (
+    <div className="set-pill-wrap">
+      <button className={`set-pill ${st.cls}`} onClick={onToggle}>
+        <span className="dot" />
+        <span className="set-pill-label">adsb.lol routes</span>
+        <span className="set-pill-val">{st.label}</span>
+      </button>
+      {expanded && (
+        <div className="set-pill-body">
+          <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
+            Free position-aware route source — picks the leg the plane is
+            actually flying when a callsign has a multi-stop rotation.
+            Disable only if all lookups go through AeroAPI.
+          </p>
+          <button
+            className="btn btn-block"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              try { await api.saveAdsblol(pin, !enabled); onChanged(); }
+              finally { setBusy(false); }
+            }}
+          >
+            {busy ? "Saving…" : enabled ? "Disable adsb.lol" : "Enable adsb.lol"}
+          </button>
         </div>
       )}
     </div>
@@ -392,57 +490,6 @@ const ADSB_STATUS: Record<ConnStatus, { cls: string; label: string }> = {
   unknown: { cls: "warn", label: "unknown" },
   unset: { cls: "", label: "off" },
 };
-
-function AdsblolSection({
-  pin, enabled, status, onChanged,
-}: {
-  pin: string;
-  enabled: boolean;
-  status: ConnStatus | undefined;
-  onChanged: () => void;
-}): JSX.Element {
-  const [expanded, setExpanded] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const st = ADSB_STATUS[status ?? (enabled ? "unknown" : "unset")];
-  const onToggle = async (): Promise<void> => {
-    setBusy(true);
-    try { await api.saveAdsblol(pin, !enabled); onChanged(); }
-    finally { setBusy(false); }
-  };
-  return (
-    <div className="set-card">
-      <button
-        className="set-collapse-head"
-        onClick={() => setExpanded((v) => !v)}
-        aria-expanded={expanded}
-      >
-        <span style={{ flex: 1, textAlign: "left", fontWeight: 700, fontSize: 13, letterSpacing: 0.3, textTransform: "uppercase", color: "var(--muted)" }}>
-          adsb.lol routes
-        </span>
-        <span className={`set-pill ${st.cls}`} style={{ width: "auto", padding: "3px 10px", gap: 7, marginRight: 6 }}>
-          <span className="dot" /> {st.label}
-        </span>
-        <span className="set-collapse-chev" style={{ transform: expanded ? "rotate(90deg)" : "none" }}>›</span>
-      </button>
-      {expanded && (
-        <div style={{ marginTop: 10 }}>
-          <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
-            Free position-aware route source — picks the leg the plane is
-            actually flying when a callsign has a multi-stop rotation. Disable
-            only if you're routing all lookups through AeroAPI.
-          </p>
-          <button
-            className="btn btn-block"
-            disabled={busy}
-            onClick={() => void onToggle()}
-          >
-            {busy ? "Saving…" : enabled ? "Disable adsb.lol" : "Enable adsb.lol"}
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
 
 function OffRadarSection({
   pin, enabled, onChanged,
