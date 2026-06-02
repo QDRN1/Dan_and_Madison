@@ -61,7 +61,7 @@ import { getCoverage } from "../coverage.js";
 import { clearEnrichmentCache, enrich } from "../enrichment.js";
 import { adminResetStats, getDeviceInfo } from "../admin.js";
 import { backfillAchievements, diagnoseAchievements } from "../achievements.js";
-import { deriveFreeRouteTimes } from "../derived-times.js";
+import { deriveFreeRouteTimes, withRouteSanity } from "../derived-times.js";
 import { fetchExtendedTrack } from "../extended-track.js";
 import { getOffRadarAircraft } from "../off-radar.js";
 import { addWatch, clearWatchFire, listWatches, removeWatch } from "../watches.js";
@@ -129,6 +129,9 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
     // repeated opens of the same flight don't re-query.
     const upgraded = await enrich(hex, ac.flight, { paid: true, lat: ac.lat, lon: ac.lon, track: ac.track });
     if (upgraded) ac.enrichment = upgraded;
+    // Position sanity check — strip stale free-source routes that don't
+    // match where the plane actually is.
+    ac.enrichment = withRouteSanity(ac, ac.enrichment);
     return { ...ac, trail: store.getTrail(hex) };
   });
 
@@ -148,13 +151,19 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
     // from live position vs the destination airport. Skips fields the paid
     // path already filled in so AeroAPI values stay authoritative.
     const ac = store.get(hex);
-    const route = ac?.enrichment?.route;
+    // Same sanity check the detail endpoint runs — skip the derived times
+    // entirely when the route doesn't match the plane's track. Sending a
+    // bad route here would put it back into the UI even after the detail
+    // endpoint stripped it.
+    const sanity = ac && ac.enrichment ? withRouteSanity(ac, ac.enrichment) : undefined;
+    const route = sanity?.route;
     const derivedRoute = ac && route ? deriveFreeRouteTimes(ac, route, trail) : undefined;
     return reply.send({
       hex,
       trail,
       sources: ext.length > 0 ? ["adsblol", "session"] : ["session"],
       route: derivedRoute,
+      routeStale: sanity?.routeStale === true,
     });
   });
 

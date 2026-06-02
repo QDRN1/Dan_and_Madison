@@ -73,6 +73,11 @@ export interface Enrichment {
   fetchedAt?: number;
   /** Unix ms of the last paid (AeroAPI) route attempt, to rate-limit retries. */
   paidCheckedAt?: number;
+  /** True when the server stripped the route because the plane's live
+   *  position didn't match the displayed origin → destination corridor
+   *  (e.g. adsb.lol's static rotation is on a different leg). The UI shows
+   *  a "route hidden" note instead of the wrong airports. */
+  routeStale?: boolean;
 }
 
 export interface AircraftPhoto {

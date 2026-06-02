@@ -57,9 +57,13 @@ export function AircraftDetail(): JSX.Element | null {
         if (!alive) return;
         if (t.trail && t.trail.length > 0) setSelectedTrail(t.trail);
         // Merge free-derived times into the detail so the route block shows
-        // actualOff + ETA + progress when AeroAPI didn't supply them.
-        if (t.route) {
-          setDetail((d) => d ? { ...d, enrichment: { ...(d.enrichment ?? {}), route: t.route } } : d);
+        // actualOff + ETA + progress when AeroAPI didn't supply them. Carry
+        // routeStale through too so the "route hidden" note can render
+        // even if /aircraft/:hex hadn't computed it yet.
+        if (t.route || t.routeStale) {
+          setDetail((d) => d
+            ? { ...d, enrichment: { ...(d.enrichment ?? {}), route: t.route, routeStale: t.routeStale } }
+            : d);
         }
       })
       .catch(() => undefined);
@@ -172,6 +176,13 @@ export function AircraftDetail(): JSX.Element | null {
           Routes are derived from the callsign and may not match every leg of
           a rotation — this is the free data path.
           {routeCredit(r?.source) && <span> {routeCredit(r?.source)}.</span>}
+        </div>
+      )}
+      {!origin && !dest && e?.routeStale && (
+        <div className="muted route-disclaimer" style={{ marginTop: 8 }}>
+          Route hidden — the free data source had this callsign on a
+          different leg, and the plane's position didn't match. Enable
+          AeroAPI in Settings for live flight plans.
         </div>
       )}
 

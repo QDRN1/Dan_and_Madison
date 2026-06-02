@@ -1,6 +1,43 @@
-import type { Aircraft, Route, TrailPoint } from "@qdrn/shared";
+import type { Aircraft, Enrichment, Route, TrailPoint } from "@qdrn/shared";
 
 const NM_PER_KM = 1 / 1.852;
+
+/** Sanity-check a free-sourced route against the plane's live position. If
+ *  (distance origin→plane + distance plane→destination) is much bigger than
+ *  the direct route length, the plane is not on this route — adsb.lol's
+ *  static rotation file is likely on a stale or different leg of the day's
+ *  flying. We strip the route and set routeStale so the UI can show "route
+ *  hidden" instead of misleading airports.
+ *
+ *  Threshold is max(routeLen × 1.5, routeLen + 80 nm). 1.5× covers normal
+ *  approach/departure vectoring without burning routes near the endpoints,
+ *  and the +80 nm floor handles short hops where 1.5× is too tight. */
+export function routeMatchesPosition(ac: Aircraft, route: Route): boolean {
+  const o = route.origin;
+  const d = route.destination;
+  if (!o?.lat || !o?.lon || !d?.lat || !d?.lon) return true; // can't check
+  if (ac.lat == null || ac.lon == null) return true;
+  const routeLen = haversineNm(o.lat, o.lon, d.lat, d.lon);
+  if (routeLen < 5) return true; // taxi / hover-ish hops aren't worth checking
+  const dOrigin = haversineNm(ac.lat, ac.lon, o.lat, o.lon);
+  const dDest   = haversineNm(ac.lat, ac.lon, d.lat, d.lon);
+  const detour  = dOrigin + dDest;
+  const allowed = Math.max(routeLen * 1.5, routeLen + 80);
+  return detour <= allowed;
+}
+
+/** Apply the position sanity check to an Enrichment in-place. Returns a
+ *  shallow copy with route stripped + routeStale = true when the check
+ *  fails; returns the original object when it passes. */
+export function withRouteSanity(ac: Aircraft, e: Enrichment | undefined): Enrichment | undefined {
+  if (!e?.route) return e;
+  // Paid sources (AeroAPI / gateway) are authoritative — they know the
+  // actual filed plan for this leg. Only sanity-check the free sources.
+  const src = e.route.source;
+  if (src === "flightaware" || src === "gateway") return e;
+  if (routeMatchesPosition(ac, e.route)) return e;
+  return { ...e, route: undefined, routeStale: true };
+}
 
 /** Great-circle distance between two lat/lon points, in nautical miles. */
 function haversineNm(lat1: number, lon1: number, lat2: number, lon2: number): number {

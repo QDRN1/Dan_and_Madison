@@ -31,6 +31,7 @@ export const api = {
       trail: import("@qdrn/shared").TrailPoint[];
       sources: string[];
       route?: import("@qdrn/shared").Route;
+      routeStale?: boolean;
     }>(`/aircraft/${hex}/track`),
   snapshot: () => get<LiveSnapshot>("/aircraft"),
   stats: () => get<Stats>("/stats"),

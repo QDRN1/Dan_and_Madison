@@ -7,6 +7,7 @@ import { bearing, distanceNm } from "./geo.js";
 import { isFlagged, pruneOldSightings, recordSighting } from "./stats.js";
 import { isOffRadarEnabled } from "./config.js";
 import { getOffRadarSnapshot } from "./off-radar.js";
+import { withRouteSanity } from "./derived-times.js";
 import { checkWatches } from "./watches.js";
 
 const TRAIL_MAX_POINTS = 250;
@@ -74,9 +75,18 @@ class AircraftStore extends EventEmitter {
         .filter((a) => !localHexes.has(a.hex));
       merged = [...local, ...off];
     }
+    // Position-based route sanity. Free-sourced routes (adsb.lol's static
+    // rotation file) can be on a stale leg; strip the route when the plane
+    // is nowhere near the displayed corridor. Cheap math, no allocations
+    // on the happy path — withRouteSanity returns the same object if
+    // nothing changed.
+    const sanitized = merged.map((a) => {
+      const e2 = withRouteSanity(a, a.enrichment);
+      return e2 === a.enrichment ? a : { ...a, enrichment: e2 };
+    });
     return {
       now: this.lastNow || Date.now(),
-      aircraft: merged,
+      aircraft: sanitized,
       messageRate: this.messageRate,
       receiver,
     };
