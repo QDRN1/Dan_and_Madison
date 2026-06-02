@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import type {
   Aircraft,
   FlaggedSighting,
@@ -10,18 +10,20 @@ import type {
 } from "@qdrn/shared";
 import { checkAll as checkAchievements } from "./achievements.js";
 import { TIMEZONE } from "./config.js";
-import { db } from "./db.js";
+import { db, DB_PATH } from "./db.js";
 
 const SIGHTING_KEEP_DAYS = Number(process.env.SIGHTING_KEEP_DAYS) > 0
   ? Number(process.env.SIGHTING_KEEP_DAYS)
   : 365;
-/** Hard cap on the sightings table to keep the SD card safe on a runaway
- *  day. At ~200 bytes/row this is ~125 MB max, well under any reasonable
- *  SD card budget. Trips before the 365-day window only at very heavy
- *  reception (5,000+ unique aircraft/day). */
-const SIGHTING_MAX_ROWS = Number(process.env.SIGHTING_MAX_ROWS) > 0
-  ? Number(process.env.SIGHTING_MAX_ROWS)
-  : 500_000;
+/** Hard cap on the SQLite DB file on disk. When the file crosses this size,
+ *  the oldest 12 months of sightings + flagged rows get deleted in one
+ *  chunk, then VACUUM reclaims the freed pages. Default 3 GB matches a
+ *  comfortable working set on the deployed Pi (~1.8 TB free) without ever
+ *  silently snowballing. Override with SIGHTING_MAX_DB_BYTES. */
+const SIGHTING_MAX_DB_BYTES = Number(process.env.SIGHTING_MAX_DB_BYTES) > 0
+  ? Number(process.env.SIGHTING_MAX_DB_BYTES)
+  : 3 * 1024 * 1024 * 1024;
+const TRIM_MONTHS = 12;
 
 /** Read the Pi's SoC temperature in °C from the thermal sysfs node. Best-effort:
  *  returns undefined on non-Linux/non-Pi or if the node isn't reachable. */
@@ -401,29 +403,52 @@ export function listNotable(limit = 100): FlaggedSighting[] {
 
 let lastPruneAt = 0;
 
-/** Trim sightings older than SIGHTING_KEEP_DAYS AND apply a hard row cap.
- *  Cheap (indexed DELETEs) and runs at most once an hour, kicked from the
- *  poller. The row cap is a safety net so even pathological reception can't
- *  fill the SD card — we keep the most-recent N rows and drop the rest. */
+/** Hourly prune. Two passes:
+ *   1. Time-based: drop anything older than SIGHTING_KEEP_DAYS (365 default).
+ *   2. Size-based: if the SQLite file on disk is over SIGHTING_MAX_DB_BYTES
+ *      (3 GB default), lop off the oldest 12 months in one chunk and VACUUM
+ *      so the file actually shrinks. Repeats next cycle if still over.
+ *  Each prune runs at most once an hour, kicked from the poller. */
 export function pruneOldSightings(): void {
   const now = Date.now();
   if (now - lastPruneAt < 60 * 60 * 1000) return;
   lastPruneAt = now;
   try {
-    // 1. Time-based: drop anything older than the retention window.
+    // 1. Time-based window prune.
     const cutoff = new Date(now - SIGHTING_KEEP_DAYS * 86_400_000);
     const cutoffDay = dayFmt.format(cutoff);
     db.prepare("DELETE FROM sightings WHERE day < ?").run(cutoffDay);
     db.prepare("DELETE FROM flagged   WHERE at  < ?").run(now - SIGHTING_KEEP_DAYS * 86_400_000);
 
-    // 2. Row-cap: if the table is still over budget after the day prune
-    // (sustained heavy reception), drop the oldest rows by last_seen.
-    const total = (db.prepare("SELECT COUNT(*) n FROM sightings").get() as { n: number }).n;
-    if (total > SIGHTING_MAX_ROWS) {
-      const over = total - SIGHTING_MAX_ROWS;
-      db.prepare(`DELETE FROM sightings WHERE rowid IN (
-        SELECT rowid FROM sightings ORDER BY last_seen ASC LIMIT ?
-      )`).run(over);
+    // 2. Size-based: only kicks in when the DB file has crossed the cap.
+    // DELETE alone doesn't shrink the file (SQLite just marks pages free)
+    // so we VACUUM after the chunk to actually reclaim disk. The trim is
+    // bounded — 12 months at a time — so a runaway prune can't wipe years
+    // of history in one go.
+    let dbSize = 0;
+    try { dbSize = statSync(DB_PATH).size; } catch { /* missing in dev */ }
+    if (dbSize > SIGHTING_MAX_DB_BYTES) {
+      const oldestRow = db.prepare("SELECT MIN(day) AS d FROM sightings").get() as { d: string | null };
+      if (oldestRow?.d) {
+        const [y, m, d] = oldestRow.d.split("-").map(Number);
+        // Advance 12 months from the oldest day. Use UTC math; the day key
+        // is already produced in the configured timezone so it's a flat
+        // calendar increment from here.
+        const cutoffDate = new Date(Date.UTC(y!, (m! - 1) + TRIM_MONTHS, d!));
+        const cutoffKey = dayFmt.format(cutoffDate);
+        // Delete the oldest 12 months (inclusive of the cutoff day so we
+        // align on month boundaries).
+        const r1 = db.prepare("DELETE FROM sightings WHERE day <= ?").run(cutoffKey);
+        const r2 = db.prepare("DELETE FROM flagged   WHERE at  <= ?").run(cutoffDate.getTime());
+        db.exec("VACUUM");
+        const after = statSync(DB_PATH).size;
+        console.log(
+          `[stats] DB over ${(SIGHTING_MAX_DB_BYTES / 1024 / 1024).toFixed(0)} MB ` +
+          `(was ${(dbSize / 1024 / 1024).toFixed(0)} MB); dropped ${r1.changes} sightings ` +
+          `+ ${r2.changes} flagged rows through ${cutoffKey}, ` +
+          `now ${(after / 1024 / 1024).toFixed(0)} MB.`,
+        );
+      }
     }
   } catch (e) {
     console.error("[stats] pruneOldSightings failed:", (e as Error).message);

@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
-const DB_PATH = process.env.DB_PATH ?? "./data/qdrn-radar.db";
+export const DB_PATH = process.env.DB_PATH ?? "./data/qdrn-radar.db";
 mkdirSync(dirname(DB_PATH), { recursive: true });
 
 export const db: Database.Database = new Database(DB_PATH);
