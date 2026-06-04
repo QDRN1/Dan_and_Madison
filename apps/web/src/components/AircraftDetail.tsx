@@ -97,9 +97,14 @@ export function AircraftDetail(): JSX.Element | null {
   // the only deep-link that lands on a map immediately. Their /data/aircraft
   // page is kept as a secondary "spec sheet" link for the registration.
   const globeUrl = `https://globe.adsb.lol/?icao=${a.hex.toLowerCase()}`;
+  // FR24 aircraft-page URL prefers registration (deep-links to the airframe
+  // spec page), falls back to callsign (search), and finally to hex (also a
+  // search). Always show a link — better to land on a search than nothing.
   const fr24Url = e?.registration
     ? `https://www.flightradar24.com/data/aircraft/${encodeURIComponent(e.registration.toLowerCase())}`
-    : null;
+    : callsign
+      ? `https://www.flightradar24.com/${encodeURIComponent(callsign)}`
+      : `https://www.flightradar24.com/${a.hex.toLowerCase()}`;
 
   // Minimized: thin pill at the bottom with just the callsign + restore.
   if (minimized) {
@@ -234,7 +239,7 @@ export function AircraftDetail(): JSX.Element | null {
           Open in live map ↗
         </a>
         {fr24Url && (
-          <a className="fr24-link fr24-link-secondary" href={fr24Url} target="_blank" rel="noreferrer">
+          <a className="fr24-link" href={fr24Url} target="_blank" rel="noreferrer">
             FR24 aircraft page ↗
           </a>
         )}

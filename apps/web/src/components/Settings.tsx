@@ -811,7 +811,20 @@ function AdminSection({ pin }: { pin: string }): JSX.Element {
               Reset stats
             </button>
             <button className="btn" style={{ flex: 1, minWidth: 140 }} disabled={busy}
-                    onClick={() => void runDestructive("Pull update", () => api.adminUpdate(pin))}>
+                    onClick={async () => {
+                      // Pull update isn't destructive (just a software update)
+                      // so it bypasses the CONFIRM-typing requirement that
+                      // Reset stats / Restart radar still use.
+                      if (!window.confirm("Pull the latest update and restart the radar?")) return;
+                      setBusy(true); setMsg("Pulling update…");
+                      try {
+                        const r = await api.adminUpdate(pin);
+                        setMsg(r.ok ? "Pull update ✓" : `Pull update failed: ${r.error ?? "unknown"}`);
+                        if (r.ok) setInfo(null);
+                      } catch (e) {
+                        setMsg(`Pull update failed: ${(e as Error).message}`);
+                      } finally { setBusy(false); }
+                    }}>
               Pull update + restart
             </button>
             <button className="btn" style={{ flex: 1, minWidth: 140 }} disabled={busy}

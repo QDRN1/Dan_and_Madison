@@ -56,6 +56,12 @@ const STEPS: Step[] = [
     body: "Tap the cloud button to overlay live precipitation from RainViewer. The map auto-zooms to the area-view scale so the rain pattern is actually readable.",
   },
   {
+    // No target on the map for off-radar fill — it's a Settings toggle.
+    // Centered explainer covers the dim.
+    title: "Off-radar fill",
+    body: "Beyond the dashed range rings is where your antenna stops hearing planes directly. Settings → Off-radar fill pulls those gaps from adsb.lol's global feed and shows them dimmed with a 📡 next to the callsign. Off by default; turn it on when you want a wider picture.",
+  },
+  {
     target: "[data-tour=\"menu-btn\"]",
     title: "The menu drawer",
     body: "The ☰ menu opens a four-tab drawer: flights nearby, stats, achievements, and settings. Let's open it.",

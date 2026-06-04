@@ -37,33 +37,19 @@ const ICON_PATHS: Record<IconTheme, string> = {
     "M36 16 C35 16 34 17 34 18 C34 19 35 20 36 20 C37 20 38 19 38 18 C38 17 37 16 36 16 Z",
 };
 
-/** Helicopter silhouette. Rendered as its own image (not part of the
- *  plane-theme rotation) so a B407 always reads as a helicopter even when
- *  the user has paws / hearts / UFOs selected for fixed-wing.
- *
- *  Inspired by Flaticon's helicopter icon #26772 — top-down view with a
- *  domed cockpit, oval cabin, one diagonal main rotor blade, tapering
- *  tail boom + horizontal stabilizer + small tail rotor. */
-const HELICOPTER_PATH =
-  // Cockpit dome (small bulge at the very top / nose)
-  "M 30 3 C 28 3 27 5 27 8 L 37 8 C 37 5 36 3 34 3 Z " +
-  // Main cabin — rounded rectangle bulging slightly at top and bottom
-  "M 25 8 C 22 8 22 10 22 14 L 22 32 C 22 36 26 38 32 38 C 38 38 42 36 42 32 L 42 14 C 42 10 42 8 39 8 Z " +
-  // Main rotor — one long diagonal blade through the rotor area, slight
-  // tilt so it reads as the rotor caught mid-spin (not a straight wing)
-  "M 4 18 L 60 10 L 61 14 L 5 22 Z " +
-  // Rotor mast struts on each side of the cabin — short vertical bars
-  // anchoring the blade to the body
-  "M 19 14 L 23 14 L 23 22 L 19 22 Z " +
-  "M 41 14 L 45 14 L 45 22 L 41 22 Z " +
-  // Upper tail boom
-  "M 30 38 L 34 38 L 33 44 L 31 44 Z " +
-  // Horizontal stabilizer / skid frame partway down the boom
-  "M 22 42 L 42 42 L 42 46 L 22 46 Z " +
-  // Lower tail boom continuing to the rotor
-  "M 30 46 L 34 46 L 33 56 L 31 56 Z " +
-  // Tail rotor (perpendicular bar at the very end)
-  "M 27 54 L 37 54 L 37 60 L 27 60 Z";
+/** Helicopter silhouette is rendered from an actual PNG asset
+ *  (brand/helicopter.png) — replacing the SVG path approach which kept
+ *  reading wrong. Loaded as a non-SDF image so it renders in its native
+ *  black silhouette (no altitude tint), which reads clearer than tinting
+ *  it would. */
+function loadHelicopterImage(map: MlMap, basePath: string): void {
+  const url = `${basePath}/brand/helicopter.png`;
+  map.loadImage(url).then((res) => {
+    if (!res) return;
+    if (map.hasImage("helicopter")) map.removeImage("helicopter");
+    map.addImage("helicopter", res.data, { sdf: false });
+  }).catch(() => { /* fall back to the plane image if the asset 404s */ });
+}
 
 function makeIconImage(path: string): { data: Uint8ClampedArray; width: number; height: number } {
   const vb = 64;
@@ -85,9 +71,6 @@ function makePlaneImage(kind: IconTheme = "plane"): { data: Uint8ClampedArray; w
   return makeIconImage(ICON_PATHS[kind]);
 }
 
-function makeHelicopterImage(): { data: Uint8ClampedArray; width: number; height: number } {
-  return makeIconImage(HELICOPTER_PATH);
-}
 
 /** ADS-B emitter category A7 is rotorcraft (helicopters). Also fall back
  *  to a type-code regex covering the major civil + military helicopters
@@ -167,8 +150,8 @@ export function MapView(): JSX.Element {
     // vanish after a dark/light switch). Recreate it fresh to be safe.
     if (map.hasImage("plane")) map.removeImage("plane");
     map.addImage("plane", makePlaneImage(icon), { sdf: true, pixelRatio: 4 });
-    if (map.hasImage("helicopter")) map.removeImage("helicopter");
-    map.addImage("helicopter", makeHelicopterImage(), { sdf: true, pixelRatio: 4 });
+    // Helicopter is a real PNG asset (brand/helicopter.png), loaded async.
+    loadHelicopterImage(map, config.basePath);
 
     // Surface airport runways much further out (from z4, country-scale) and
     // hammer the contrast so major airports are visible without zooming in.

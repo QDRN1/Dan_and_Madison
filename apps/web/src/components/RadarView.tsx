@@ -87,7 +87,7 @@ export function RadarView(): JSX.Element {
         </div>
 
         <div className="drawer-tabs" data-tour="drawer-tabs">
-          {(["flights", "stats", "achievements", "settings"] as const).map((p) => (
+          {(["stats", "flights", "achievements", "settings"] as const).map((p) => (
             <button
               key={p}
               data-tour={`tab-${p}`}

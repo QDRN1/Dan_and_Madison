@@ -22,12 +22,18 @@ QDRN_REPO=$REPO_DIR
 EOF
 
 systemctl daemon-reload
-systemctl enable --now qdrn-netd.service
+systemctl enable qdrn-netd.service
+# `enable --now` does NOT restart an already-running service, so an
+# install-over-existing leaves the old code running in memory and the
+# new qdrn-netd.py never takes effect. Force a restart so the new file
+# actually starts serving — this was the bug that left the admin
+# update button returning "unknown op" after a successful install.
+systemctl restart qdrn-netd.service
 
 # Quick sanity check
 sleep 1
 if [[ -S /run/qdrn-net.sock ]]; then
-  echo "qdrn-netd installed and listening on /run/qdrn-net.sock"
+  echo "qdrn-netd installed, restarted, listening on /run/qdrn-net.sock"
 else
   echo "qdrn-netd installed but the socket isn't up yet — check 'journalctl -u qdrn-netd'"
 fi

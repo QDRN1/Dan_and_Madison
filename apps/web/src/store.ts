@@ -104,7 +104,7 @@ export const useRadar = create<RadarState>((set, get) => ({
   liveStatus: "connecting",
   watchHit: null,
   drawerOpen: false,
-  drawerPanel: "flights",
+  drawerPanel: "stats",
   tourStep: null,
 
   setConfig: (config) => set({ config }),
