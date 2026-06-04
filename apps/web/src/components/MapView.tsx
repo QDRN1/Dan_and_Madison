@@ -41,25 +41,29 @@ const ICON_PATHS: Record<IconTheme, string> = {
  *  plane-theme rotation) so a B407 always reads as a helicopter even when
  *  the user has paws / hearts / UFOs selected for fixed-wing.
  *
- *  Top-down geometry:
- *   - Rounded oval cabin (the dome you see from above), nose at the top
- *   - Tapering tail boom extending behind
- *   - Perpendicular tail rotor at the end of the boom
- *   - One main rotor blade spanning the full width — the blur of the
- *     spinning disc reads better as a single horizontal line from above
- *     than a + / X (which makes it look like a propeller plane). */
+ *  Inspired by Flaticon's helicopter icon #26772 — top-down view with a
+ *  domed cockpit, oval cabin, one diagonal main rotor blade, tapering
+ *  tail boom + horizontal stabilizer + small tail rotor. */
 const HELICOPTER_PATH =
-  // Cabin (oval/teardrop pointing up, slight pointed nose)
-  "M 32 13 C 23 13 19 20 19 28 C 19 36 22 41 26 43 L 26 47 L 38 47 L 38 43 C 42 41 45 36 45 28 C 45 20 41 13 32 13 Z " +
-  // Tail boom (tapers from cabin to tail rotor)
-  "M 29 47 L 35 47 L 33.5 56 L 30.5 56 Z " +
-  // Tail rotor (perpendicular bar at end of boom)
-  "M 24 54 L 40 54 L 40 58 L 24 58 Z " +
-  // Main rotor — single blade across the full width
-  "M 2 26 L 62 26 L 62 30 L 2 30 Z " +
-  // Rotor hub — small visible dot on top of the cabin so the blade looks
-  // anchored rather than floating
-  "M 30 24 L 34 24 L 34 32 L 30 32 Z";
+  // Cockpit dome (small bulge at the very top / nose)
+  "M 30 3 C 28 3 27 5 27 8 L 37 8 C 37 5 36 3 34 3 Z " +
+  // Main cabin — rounded rectangle bulging slightly at top and bottom
+  "M 25 8 C 22 8 22 10 22 14 L 22 32 C 22 36 26 38 32 38 C 38 38 42 36 42 32 L 42 14 C 42 10 42 8 39 8 Z " +
+  // Main rotor — one long diagonal blade through the rotor area, slight
+  // tilt so it reads as the rotor caught mid-spin (not a straight wing)
+  "M 4 18 L 60 10 L 61 14 L 5 22 Z " +
+  // Rotor mast struts on each side of the cabin — short vertical bars
+  // anchoring the blade to the body
+  "M 19 14 L 23 14 L 23 22 L 19 22 Z " +
+  "M 41 14 L 45 14 L 45 22 L 41 22 Z " +
+  // Upper tail boom
+  "M 30 38 L 34 38 L 33 44 L 31 44 Z " +
+  // Horizontal stabilizer / skid frame partway down the boom
+  "M 22 42 L 42 42 L 42 46 L 22 46 Z " +
+  // Lower tail boom continuing to the rotor
+  "M 30 46 L 34 46 L 33 56 L 31 56 Z " +
+  // Tail rotor (perpendicular bar at the very end)
+  "M 27 54 L 37 54 L 37 60 L 27 60 Z";
 
 function makeIconImage(path: string): { data: Uint8ClampedArray; width: number; height: number } {
   const vb = 64;
