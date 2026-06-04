@@ -1532,3 +1532,36 @@
   line-height: 1.5;
   color: var(--muted);
 }
+
+/* Stats panel — section headers and rows are buttons so they're keyboard-
+ * tabbable and have hover affordance. Reset all the button defaults so they
+ * read the same as the bare labels they replaced. */
+.stat-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+.stat-section-head:hover { color: var(--accent); }
+
+.stat-row-btn {
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: 7px 4px;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+}
+.stat-row-btn:hover { background: var(--hover); }

@@ -80,6 +80,12 @@ services:
     build:
       context: .
       dockerfile: apps/server/Dockerfile
+      args:
+        # The host shell substitutes these from `git rev-parse --short HEAD`
+        # and `git log -1 --format=%cI`. If unset (someone running `docker
+        # compose build` standalone), the Dockerfile defaults kick in.
+        QDRN_BUILD_SHA: "${QDRN_BUILD_SHA:-dev}"
+        QDRN_BUILD_AT:  "${QDRN_BUILD_AT:-}"
     image: qdrn-radar:latest
     container_name: qdrn-radar
     restart: unless-stopped

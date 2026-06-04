@@ -799,7 +799,10 @@ function AdminSection({ pin }: { pin: string }): JSX.Element {
               <div><b>CPU temp:</b> {info.cpuTempF != null ? `${info.cpuTempF.toFixed(0)} °F` : "—"}</div>
               <div><b>Sightings rows:</b> {info.sightingsCount.toLocaleString()}</div>
               <div><b>Achievements:</b> {info.achievementsEarned}/{info.achievementsTotal} earned</div>
-              <div><b>Build:</b> {info.buildSha?.slice(0, 7) ?? "unknown"}</div>
+              <div>
+                <b>Build:</b> {info.buildSha ? info.buildSha.slice(0, 7) : "unknown"}
+                {info.buildAt && <span className="muted"> · {new Date(info.buildAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>}
+              </div>
             </div>
           )}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -863,6 +866,7 @@ interface DeviceInfo {
   sightingsCount: number;
   achievementsEarned: number; achievementsTotal: number;
   buildSha?: string;
+  buildAt?: string;
 }
 
 function PinSection({ currentPin, onChanged }: { currentPin: string; onChanged: (newPin: string) => void }): JSX.Element {

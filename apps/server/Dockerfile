@@ -51,6 +51,17 @@ COPY --from=build /app/apps/server/package.json ./apps/server/package.json
 COPY --from=build /app/apps/web/dist ./apps/web/dist
 COPY --from=build /app/brand ./brand
 
+# Capture the git SHA at build time so the admin device-info card can show
+# a real "Build:" line instead of "unknown". The host passes it as a build
+# arg from `git rev-parse --short HEAD` (see docker-compose.yml). Falls
+# back to "dev" for unconfigured local builds.
+ARG QDRN_BUILD_SHA=dev
+ARG QDRN_BUILD_AT=
+ENV QDRN_BUILD_SHA=${QDRN_BUILD_SHA}
+ENV QDRN_BUILD_AT=${QDRN_BUILD_AT}
+RUN echo "$QDRN_BUILD_SHA" > /app/.build-sha \
+ && echo "$QDRN_BUILD_AT" > /app/.build-at
+
 EXPOSE 8080
 VOLUME ["/app/data"]
 ENV DB_PATH=/app/data/qdrn-radar.db

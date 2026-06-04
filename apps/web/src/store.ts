@@ -5,7 +5,7 @@ export type LiveStatus = "connecting" | "live" | "stale" | "offline";
 export type Theme = "light" | "dark";
 export type IconTheme = "plane" | "paw" | "heart" | "ufo";
 
-export type PopoutKind = "in-view" | "sightings" | "farthest";
+export type PopoutKind = "in-view" | "sightings" | "farthest" | "notable";
 
 /** When the user drills into a stat card we open a full-screen popout. State
  *  lives in the store so the popout mounts at the root of RadarView (outside
@@ -16,6 +16,11 @@ export interface PopoutState {
   scope?: SightingScope;
   sort?: SightingSort;
   title?: string;
+  /** Pre-filled airline filter (e.g. clicking a row in "Top operators today"
+   *  opens the sightings popout already filtered to that operator). */
+  airline?: string;
+  /** Pre-filled search query (e.g. clicking a row in "Top aircraft types"). */
+  q?: string;
 }
 
 function initialTheme(): Theme {

@@ -85,6 +85,7 @@ export const api = {
     diskUsedPct: number; diskFreeHuman: string; cpuTempF: number | null;
     sightingsCount: number; achievementsEarned: number; achievementsTotal: number;
     buildSha?: string;
+    buildAt?: string;
   }>("/admin/device-info", { pin }),
   adminResetStats: (pin: string) => post<{ ok: boolean; error?: string }>("/admin/reset-stats", { pin }),
   adminBackfillAchievements: (pin: string) => post<{ ok: boolean; processed?: number; fired?: number; error?: string }>("/admin/backfill-achievements", { pin }),

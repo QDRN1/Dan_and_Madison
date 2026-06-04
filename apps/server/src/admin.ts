@@ -11,6 +11,7 @@ interface DeviceInfo {
   sightingsCount: number;
   achievementsEarned: number; achievementsTotal: number;
   buildSha?: string;
+  buildAt?: string;
 }
 
 function readUptimeSec(): number {
@@ -68,10 +69,23 @@ function readDiskFreeFor(path: string): { freeBytes: number; totalBytes: number 
 }
 
 function buildSha(): string | undefined {
-  // Optional file written by the install / publish script. Falls back to env.
-  try { return readFileSync("/etc/qdrn-build.sha", "utf8").trim(); }
-  catch { /* not present */ }
-  return process.env.QDRN_BUILD_SHA;
+  // The Docker build writes the host's `git rev-parse --short HEAD` into
+  // /app/.build-sha (see Dockerfile + docker-compose.yml build args). Env
+  // var is the fallback for non-Docker runs.
+  try {
+    const sha = readFileSync("/app/.build-sha", "utf8").trim();
+    if (sha && sha !== "dev") return sha;
+  } catch { /* not in image */ }
+  return process.env.QDRN_BUILD_SHA || undefined;
+}
+
+function buildAt(): string | undefined {
+  // ISO timestamp from `git log -1 --format=%cI` at build time.
+  try {
+    const at = readFileSync("/app/.build-at", "utf8").trim();
+    if (at) return at;
+  } catch { /* not in image */ }
+  return process.env.QDRN_BUILD_AT || undefined;
 }
 
 export async function getDeviceInfo(): Promise<DeviceInfo> {
@@ -97,6 +111,7 @@ export async function getDeviceInfo(): Promise<DeviceInfo> {
     sightingsCount,
     achievementsEarned, achievementsTotal,
     buildSha: buildSha(),
+    buildAt: buildAt(),
   };
 }
 
