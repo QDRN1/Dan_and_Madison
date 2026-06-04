@@ -157,13 +157,20 @@ def restart_radar(_req: dict) -> dict:
 def update_radar(_req: dict) -> dict:
     """`git pull` the repo + pull the latest container image + re-up the
     radar. Only the radar container churns (`--no-deps`) so the feeders
-    stay running."""
+    stay running.
+
+    qdrn-netd runs as root but the repo typically lives in a regular
+    user's home dir (e.g. /home/skytrack/Dan_and_Madison). Git's CVE
+    -2022-24765 protection refuses to operate when the invoking UID
+    differs from the repo owner unless `safe.directory` says it's OK,
+    so we pass it inline. Per-invocation is cleaner than touching the
+    root user's global git config."""
     repo = os.environ.get("QDRN_REPO", "/opt/qdrn")
     if not os.path.isdir(repo):
         return {"ok": False, "error": f"QDRN_REPO not found: {repo}"}
     compose = ["docker", "compose", "-f", os.path.join(repo, "docker-compose.yml")]
     steps = [
-        (["git", "-C", repo, "pull", "--ff-only"], 120),
+        (["git", "-c", f"safe.directory={repo}", "-C", repo, "pull", "--ff-only"], 120),
         (compose + ["pull", "qdrn-radar"], 600),
         (compose + ["up", "-d", "--no-deps", "qdrn-radar"], 600),
     ]

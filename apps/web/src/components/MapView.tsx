@@ -41,13 +41,21 @@ const ICON_PATHS: Record<IconTheme, string> = {
  *  (brand/helicopter.png) — replacing the SVG path approach which kept
  *  reading wrong. Loaded as a non-SDF image so it renders in its native
  *  black silhouette (no altitude tint), which reads clearer than tinting
- *  it would. */
+ *  it would.
+ *
+ *  pixelRatio matches the plane icon's logical 64x64 size. The plane is
+ *  a 256-pixel raster with pixelRatio 4 (256/4=64). Whatever size the
+ *  source PNG is, we divide by 64 to land on the same on-screen scale
+ *  when icon-size 0.7 is applied. Without this the icon renders at the
+ *  raw pixel size, which on a 512-px source comes out ~8× too big. */
 function loadHelicopterImage(map: MlMap, basePath: string): void {
   const url = `${basePath}/brand/helicopter.png`;
   map.loadImage(url).then((res) => {
     if (!res) return;
+    const width = (res.data as { width?: number }).width ?? 64;
+    const pixelRatio = Math.max(1, Math.round(width / 64));
     if (map.hasImage("helicopter")) map.removeImage("helicopter");
-    map.addImage("helicopter", res.data, { sdf: false });
+    map.addImage("helicopter", res.data, { sdf: false, pixelRatio });
   }).catch(() => { /* fall back to the plane image if the asset 404s */ });
 }
 
