@@ -433,20 +433,30 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: { pin?: string } }>("/admin/update", async (req, reply) => {
     if (!adminPinOk(req.body?.pin)) return reply.code(401).send({ error: "owner_required" });
     // Pull update needs `git pull` on the host, which the container can't
-    // do directly — qdrn-netd is the only path. If qdrn-netd is too old to
-    // know the "update" op, give the user the exact command to run rather
-    // than a cryptic "unknown op" error.
+    // do directly — qdrn-netd is the only path. Translate the two most
+    // common failure modes into exact instructions instead of cryptic
+    // errors. The container can't fix the host either way, but at least
+    // the user knows which command to paste.
     try {
       const r = await netd<{ ok: boolean; error?: string }>({ op: "update" });
       if (!r.ok && /unknown op/i.test(r.error ?? "")) {
         return {
           ok: false,
-          error: "Host helper (qdrn-netd) is out of date and doesn't know the `update` op. SSH to the Pi and run:\n\n  sudo bash ~/Dan_and_Madison/provisioning/qdrn-netd/install-netd.sh\n\nThen this button will work.",
+          error: "Host helper (qdrn-netd) is running an old version that doesn't know the `update` op. SSH to the Pi and run:\n\n  sudo bash ~/Dan_and_Madison/provisioning/qdrn-netd/install-netd.sh\n\nThe install script now restarts the service so the new code takes effect.",
         };
       }
       return r;
     } catch (e) {
-      return { ok: false, error: `qdrn-netd unavailable: ${(e as Error).message}` };
+      const msg = (e as Error).message;
+      // ECONNREFUSED = the socket is there or the service isn't running.
+      // ENOENT     = the socket file doesn't exist at all.
+      if (/ECONNREFUSED|ENOENT/.test(msg)) {
+        return {
+          ok: false,
+          error: "Host helper (qdrn-netd) isn't responding. SSH to the Pi and run:\n\n  sudo systemctl restart qdrn-netd\n  sudo systemctl status qdrn-netd\n\nIf the status shows it failed, check the logs:\n\n  sudo journalctl -u qdrn-netd -n 50\n\nAs a last resort, reinstall:\n\n  sudo bash ~/Dan_and_Madison/provisioning/qdrn-netd/install-netd.sh",
+        };
+      }
+      return { ok: false, error: `qdrn-netd unavailable: ${msg}` };
     }
   });
 
