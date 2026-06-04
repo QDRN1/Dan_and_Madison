@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import type { AdminSettings, ConnStatus, Connections, FlightWatch, GatewayInfo, WifiNetwork, WifiScanResult } from "@qdrn/shared";
+import type { AdminSettings, AircraftClass, ConnStatus, Connections, FlightWatch, GatewayInfo, WifiNetwork, WifiScanResult } from "@qdrn/shared";
+import { AIRCRAFT_CLASS_LABELS } from "@qdrn/shared";
 import { BASE, api, cityCenter, geocodeCity, type GeoResult } from "../api";
 import { useRadar, type IconTheme } from "../store";
 
@@ -144,6 +145,9 @@ export function Settings(): JSX.Element {
 
       {/* 5. "Not on my radar" — adsb.lol fill-in for planes outside reception */}
       <OffRadarSection pin={pin} enabled={s.offRadarEnabled} onChanged={() => void load(pin)} />
+
+      {/* 5a. Aircraft class filter — hide categories from the live map / list */}
+      <ClassFilterSection />
 
       {/* 5b. Flight watches (custom alerts on a specific callsign) */}
       <WatchesSection pin={pin} />
@@ -541,6 +545,54 @@ function OffRadarSection({
 /** User-managed flight-watch list. Add a name + callsign + (optional) date
  *  and the poller fires a big alert when that exact flight enters the
  *  radar — only on the specified date (or always, if blank). */
+/** Toggle which aircraft classes (commercial / cargo / private / military
+ *  / helicopter / other) are shown on the live map and flights list. The
+ *  same buckets back the popout reports' class filter dropdown.
+ *  State lives in the radar store + localStorage so it survives reloads. */
+function ClassFilterSection(): JSX.Element {
+  const hidden = useRadar((s) => s.hiddenClasses);
+  const toggle = useRadar((s) => s.toggleHiddenClass);
+  const [expanded, setExpanded] = useState(false);
+  const classes: AircraftClass[] = ["commercial", "cargo", "private", "military", "helicopter", "other"];
+  const shownCount = classes.length - hidden.size;
+  return (
+    <div className="set-card">
+      <button className="set-collapse-head" onClick={() => setExpanded((v) => !v)} aria-expanded={expanded}>
+        <span style={{ flex: 1, textAlign: "left", fontWeight: 700, fontSize: 13, letterSpacing: 0.3, textTransform: "uppercase", color: "var(--muted)" }}>
+          Aircraft filter
+        </span>
+        <span className="muted" style={{ fontSize: 12, marginRight: 8 }}>
+          {hidden.size === 0 ? "all visible" : `${shownCount} of ${classes.length}`}
+        </span>
+        <span className="set-collapse-chev" style={{ transform: expanded ? "rotate(90deg)" : "none" }}>›</span>
+      </button>
+      {expanded && (
+        <div style={{ marginTop: 10 }}>
+          <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
+            Tap to hide a category from the live map and flights list. Same
+            buckets work as a filter on the popout reports.
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            {classes.map((c) => {
+              const isHidden = hidden.has(c);
+              return (
+                <button
+                  key={c}
+                  type="button"
+                  className={`btn class-toggle${isHidden ? "" : " on"}`}
+                  onClick={() => toggle(c)}
+                >
+                  {isHidden ? "○" : "●"} {AIRCRAFT_CLASS_LABELS[c]}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function WatchesSection({ pin }: { pin: string }): JSX.Element {
   const [expanded, setExpanded] = useState(false);
   const [watches, setWatches] = useState<FlightWatch[]>([]);

@@ -185,6 +185,8 @@ export interface SightingRow {
   /** Origin airport code (ICAO preferred, IATA fallback) saved from enrichment. */
   originIcao?: string | null;
   destIcao?: string | null;
+  /** Aircraft class bucket (commercial/cargo/private/military/heli/other). */
+  klass?: AircraftClass | null;
   firstSeen?: number;
   lastSeen?: number;
   maxDistNm?: number;
@@ -200,6 +202,8 @@ export interface SightingFilter {
   q?: string;
   /** Exact operator name (from the operators dropdown). */
   airline?: string;
+  /** Aircraft classification (commercial/cargo/private/military/heli/etc). */
+  klass?: AircraftClass;
   /** Sort order. */
   sort?: SightingSort;
   offset?: number;
@@ -212,6 +216,84 @@ export interface SightingPage {
   /** Operator names with counts, useful for populating the airline dropdown. */
   airlines: { name: string; count: number }[];
 }
+
+/** Aircraft classification — a high-level "what kind of plane is this"
+ *  bucket the user can filter by on both the live map and the report
+ *  popouts. classifyAircraft() lives in this file so the server (for
+ *  sightings queries) and the client (for live filtering) agree. */
+export type AircraftClass =
+  | "commercial"  // scheduled airline (Delta, BA, JAL, etc.)
+  | "cargo"       // FedEx, UPS, DHL, Atlas, Polar, Kalitta, etc.
+  | "private"     // N-number callsign, biz jet, GA
+  | "military"    // military operator OR military hex range
+  | "helicopter"  // ADS-B category A7 OR helicopter type code
+  | "other";      // blimps, gliders, balloons, ground vehicles, unknown
+
+interface ClassifierInput {
+  hex: string;
+  flight?: string;
+  category?: string;        // ADS-B emitter category (A0..C7)
+  enrichment?: {
+    operator?: string;
+    operatorIcao?: string;
+    operatorIata?: string;
+    typeCode?: string;
+  };
+}
+
+const HELO_TYPE_RE = /\b(R22|R44|R66|EC[0-9]|H1[35]5|H125|H145|H160|H175|UH-?60|AS3[0-9]|AS65|AS50|AS55|S70|S76|S92|EC1|B407|B412|B429|B505|A109|A119|A139|MD500|MD600|MD9|HEL|UH-|CH-|MI-?[0-9]|KA[0-9])\b/i;
+const MIL_OP_RE = /\b(air force|navy|army|marine|coast guard|national guard|military|royal air|nato|space force|usaf|usn|usmc|usa\b|usaf\b)\b/i;
+const CARGO_OP_RE = /\b(fedex|federal express|ups|united parcel|dhl|atlas air|polar air|kalitta|amerijet|cargolux|cathay cargo|west cargo|fed ?ex|ata cargo|ups cargo)\b/i;
+const BIZJET_TYPE_RE = /\b(C[CL]\d{2,3}|GLF[1-7]|GIV|GV|GVI|GLEX|H25|F2TH|CL30|CL35|CL60|E55P|E55B|E45X|F[57]\d|LJ\d+|PC12|PC24|HDJN|HA4T|JS3[12])\b/i;
+
+/** US military hex ranges (rough). adsbexchange/Mictronics keep the
+ *  authoritative list — we cover the most common allocations. */
+function isMilitaryHex(hex: string): boolean {
+  const h = hex.toUpperCase();
+  // US: ADF7C8-AFFFFF
+  if (h >= "ADF7C8" && h <= "AFFFFF") return true;
+  // UK military: 43C000-43CFFF
+  if (h >= "43C000" && h <= "43CFFF") return true;
+  // German military: 3F8000-3FBFFF
+  if (h >= "3F8000" && h <= "3FBFFF") return true;
+  // French military: 3A8000-3AFFFF
+  if (h >= "3A8000" && h <= "3AFFFF") return true;
+  // Canadian forces: C00000-C00FFF
+  if (h >= "C00000" && h <= "C00FFF") return true;
+  return false;
+}
+
+export function classifyAircraft(ac: ClassifierInput): AircraftClass {
+  const op = ac.enrichment?.operator ?? "";
+  const type = ac.enrichment?.typeCode ?? "";
+  // 1. Helicopter beats everything — a medevac heli is a helicopter,
+  //    not a "commercial flight that happens to be a B407".
+  if (ac.category === "A7") return "helicopter";
+  if (HELO_TYPE_RE.test(type)) return "helicopter";
+  // 2. Military — operator string or hex range. Catches AF flights even
+  //    when the rotorcraft check above misses (some military helos do).
+  if (op && MIL_OP_RE.test(op)) return "military";
+  if (isMilitaryHex(ac.hex)) return "military";
+  // 3. Cargo carriers next so a 747-400F doesn't get bucketed as
+  //    "commercial" just because FedEx has an ICAO code.
+  if (op && CARGO_OP_RE.test(op)) return "cargo";
+  // 4. Commercial — has an operator with an IATA/ICAO code (scheduled
+  //    airline pattern).
+  if (op && (ac.enrichment?.operatorIcao || ac.enrichment?.operatorIata)) return "commercial";
+  // 5. Private — N-number callsign or biz-jet type code.
+  if (ac.flight && /^N\d/.test(ac.flight.trim().toUpperCase())) return "private";
+  if (BIZJET_TYPE_RE.test(type)) return "private";
+  return "other";
+}
+
+export const AIRCRAFT_CLASS_LABELS: Record<AircraftClass, string> = {
+  commercial: "Commercial",
+  cargo: "Cargo",
+  private: "Private",
+  military: "Military",
+  helicopter: "Helicopters",
+  other: "Other",
+};
 
 /** A user-pinned callsign to alert on when it enters the radar. */
 export interface FlightWatch {

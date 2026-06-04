@@ -1,3 +1,4 @@
+import { classifyAircraft } from "@qdrn/shared";
 import { useRadar } from "../store";
 import { altColor, altFeet, fmtAlt, frontierAnimal, label } from "../format";
 
@@ -5,9 +6,11 @@ export function FlightList(): JSX.Element {
   const aircraft = useRadar((s) => s.aircraft);
   const selectedHex = useRadar((s) => s.selectedHex);
   const select = useRadar((s) => s.select);
+  const hidden = useRadar((s) => s.hiddenClasses);
 
   const sorted = [...aircraft]
     .filter((a) => a.lat != null)
+    .filter((a) => hidden.size === 0 || !hidden.has(classifyAircraft(a)))
     .sort((a, b) => (a.distNm ?? 1e9) - (b.distNm ?? 1e9));
 
   return (

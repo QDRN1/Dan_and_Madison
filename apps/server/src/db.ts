@@ -101,6 +101,10 @@ function ensureColumn(table: string, column: string, type: string): void {
 ensureColumn("sightings", "origin_icao", "TEXT");
 ensureColumn("sightings", "dest_icao", "TEXT");
 ensureColumn("sightings", "route_source", "TEXT");
+// AircraftClass bucket the user filters by (commercial / cargo / private /
+// military / helicopter / other). Computed at recordSighting time.
+ensureColumn("sightings", "klass", "TEXT");
+db.exec(`CREATE INDEX IF NOT EXISTS idx_sightings_klass ON sightings(klass);`);
 // Watches gained "name" (who/what the watch is for) and "flight_date"
 // (YYYY-MM-DD when the flight is expected) after the initial schema.
 ensureColumn("watches", "name", "TEXT");

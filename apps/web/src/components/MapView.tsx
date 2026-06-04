@@ -3,6 +3,7 @@ import maplibregl, { type GeoJSONSource, type Map as MlMap } from "maplibre-gl";
 import type { FeatureCollection } from "geojson";
 import type { CoveragePoint } from "@qdrn/shared";
 import { api } from "../api";
+import { classifyAircraft } from "@qdrn/shared";
 import { useRadar, type IconTheme, type Theme } from "../store";
 import { altColor, altFeet } from "../format";
 import { MAJOR_AIRPORTS } from "./major-airports";
@@ -489,10 +490,12 @@ export function MapView(): JSX.Element {
     const src = map.getSource("aircraft") as GeoJSONSource | undefined;
     if (!src) return;
     const cur = useRadar.getState();
+    const hidden = cur.hiddenClasses;
     src.setData({
       type: "FeatureCollection",
       features: cur.aircraft
         .filter((a) => a.lon != null && a.lat != null)
+        .filter((a) => hidden.size === 0 || !hidden.has(classifyAircraft(a)))
         .map((a) => ({
           type: "Feature",
           properties: {

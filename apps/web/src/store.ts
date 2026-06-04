@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Aircraft, FlightWatchHit, LiveSnapshot, PublicConfig, SightingScope, SightingSort, TrailPoint } from "@qdrn/shared";
+import type { Aircraft, AircraftClass, FlightWatchHit, LiveSnapshot, PublicConfig, SightingScope, SightingSort, TrailPoint } from "@qdrn/shared";
 
 export type LiveStatus = "connecting" | "live" | "stale" | "offline";
 export type Theme = "light" | "dark";
@@ -21,6 +21,10 @@ export interface PopoutState {
   airline?: string;
   /** Pre-filled search query (e.g. clicking a row in "Top aircraft types"). */
   q?: string;
+  /** Pre-filled aircraft class filter (commercial / cargo / private /
+   *  military / helicopter / other). Drives the popout's class dropdown
+   *  and the server-side sightings query. */
+  klass?: AircraftClass;
 }
 
 function initialTheme(): Theme {
@@ -47,6 +51,16 @@ function initialStorm(): boolean {
   try { return localStorage.getItem("qdrn-storm") === "1"; } catch { return false; }
 }
 
+/** Persisted set of aircraft classes the user has hidden from the live view.
+ *  Empty by default — all aircraft visible. */
+function initialHiddenClasses(): Set<AircraftClass> {
+  try {
+    const raw = localStorage.getItem("qdrn-hidden-classes");
+    if (!raw) return new Set();
+    return new Set(JSON.parse(raw) as AircraftClass[]);
+  } catch { return new Set(); }
+}
+
 interface RadarState {
   config: PublicConfig | null;
   aircraft: Aircraft[];
@@ -66,6 +80,8 @@ interface RadarState {
    *  open it imperatively during the tour. */
   drawerOpen: boolean;
   drawerPanel: "flights" | "stats" | "achievements" | "settings";
+  hiddenClasses: Set<AircraftClass>;
+  toggleHiddenClass: (k: AircraftClass) => void;
   /** Walkthrough engine state. Steps live in a separate module. */
   tourStep: number | null;
   setConfig: (c: PublicConfig) => void;
@@ -105,6 +121,7 @@ export const useRadar = create<RadarState>((set, get) => ({
   watchHit: null,
   drawerOpen: false,
   drawerPanel: "stats",
+  hiddenClasses: initialHiddenClasses(),
   tourStep: null,
 
   setConfig: (config) => set({ config }),
@@ -112,6 +129,12 @@ export const useRadar = create<RadarState>((set, get) => ({
   setWatchHit: (watchHit) => set({ watchHit }),
   setDrawerOpen: (drawerOpen) => set({ drawerOpen }),
   setDrawerPanel: (drawerPanel) => set({ drawerPanel }),
+  toggleHiddenClass: (k) => set((s) => {
+    const next = new Set(s.hiddenClasses);
+    if (next.has(k)) next.delete(k); else next.add(k);
+    try { localStorage.setItem("qdrn-hidden-classes", JSON.stringify([...next])); } catch { /* ignore */ }
+    return { hiddenClasses: next };
+  }),
   startTour: () => set({ tourStep: 0 }),
   endTour: () => set({ tourStep: null }),
   nextTourStep: () => set((s) => ({ tourStep: s.tourStep == null ? 0 : s.tourStep + 1 })),

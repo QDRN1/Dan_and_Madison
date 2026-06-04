@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import type { FlaggedSighting, SightingPage, SightingRow, SightingScope, SightingSort } from "@qdrn/shared";
+import type { Aircraft, AircraftClass, FlaggedSighting, SightingPage, SightingRow, SightingScope, SightingSort } from "@qdrn/shared";
+import { AIRCRAFT_CLASS_LABELS, classifyAircraft } from "@qdrn/shared";
 import { api } from "../api";
 import { type PopoutKind, useRadar } from "../store";
 
@@ -19,6 +20,7 @@ export function SightingsPopout(): JSX.Element | null {
   const [sort, setSort] = useState<SightingSort>(popout?.sort ?? "recent");
   const [q, setQ] = useState(popout?.q ?? "");
   const [airline, setAirline] = useState<string>(popout?.airline ?? "");
+  const [klass, setKlass] = useState<AircraftClass | "">(popout?.klass ?? "");
   const [page, setPage] = useState<SightingPage | null>(null);
   const [notable, setNotable] = useState<FlaggedSighting[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -33,10 +35,11 @@ export function SightingsPopout(): JSX.Element | null {
     setSort(popout.sort ?? (popout.kind === "farthest" ? "farthest" : "recent"));
     setQ(popout.q ?? "");
     setAirline(popout.airline ?? "");
+    setKlass(popout.klass ?? "");
     setOffset(0);
   }, [popout]);
 
-  useEffect(() => { setOffset(0); }, [scope, sort, q, airline]);
+  useEffect(() => { setOffset(0); }, [scope, sort, q, airline, klass]);
 
   // Debounce search so we don't fire on every keystroke.
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -51,9 +54,9 @@ export function SightingsPopout(): JSX.Element | null {
   // every snapshot. Cheap — purely client-side, no flash.
   useEffect(() => {
     if (!popout || popout.kind !== "in-view") return;
-    setPage(applyClientFilters(live, debouncedQ, airline, sort));
+    setPage(applyClientFilters(live, debouncedQ, airline, klass || undefined, sort));
     setLoading(false);
-  }, [popout, debouncedQ, airline, sort, live]);
+  }, [popout, debouncedQ, airline, klass, sort, live]);
 
   // Sightings + farthest popouts hit the server. `live` is deliberately NOT
   // in the dep list — including it (as I previously did) re-fired the fetch
@@ -65,12 +68,12 @@ export function SightingsPopout(): JSX.Element | null {
     if (popout.kind === "in-view" || popout.kind === "notable") return;
     let alive = true;
     setLoading(true);
-    api.sightings({ scope, sort, q: debouncedQ, airline, offset, limit: PAGE_SIZE })
+    api.sightings({ scope, sort, q: debouncedQ, airline, klass: klass || undefined, offset, limit: PAGE_SIZE })
       .then((p) => { if (alive) setPage(p); })
       .catch(() => undefined)
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [popout, scope, sort, debouncedQ, airline, offset]);
+  }, [popout, scope, sort, debouncedQ, airline, klass, offset]);
 
   // Notable popout — pulls the flagged-sightings feed. Filtered client-side
   // by debounced search since the result set is small (a few hundred max).
@@ -136,6 +139,12 @@ export function SightingsPopout(): JSX.Element | null {
                 autoCorrect="off"
                 spellCheck={false}
               />
+              <select className="input" value={klass} onChange={(e) => setKlass(e.target.value as AircraftClass | "")}>
+                <option value="">All aircraft</option>
+                {(["commercial", "cargo", "private", "military", "helicopter", "other"] as const).map((c) => (
+                  <option key={c} value={c}>{AIRCRAFT_CLASS_LABELS[c]}</option>
+                ))}
+              </select>
               <select className="input" value={airline} onChange={(e) => setAirline(e.target.value)}>
                 <option value="">All airlines</option>
                 {page?.airlines.map((a) => (
@@ -281,12 +290,13 @@ function routeLabel(r: SightingRow): string {
 
 /** Mirror the server-side filter for the "in-view" live source. */
 function applyClientFilters(
-  live: { hex: string; flight?: string; distNm?: number; enrichment?: { typeCode?: string; typeName?: string; operator?: string; operatorIcao?: string; route?: { origin?: { icao?: string; iata?: string }; destination?: { icao?: string; iata?: string } } } }[],
+  live: Aircraft[],
   q: string,
   airline: string,
+  klass: AircraftClass | undefined,
   sort: SightingSort,
 ): SightingPage {
-  const rowsAll: SightingRow[] = live.map((a) => ({
+  const rowsAll: (SightingRow & { _klass: AircraftClass })[] = live.map((a) => ({
     hex: a.hex,
     flight: a.flight,
     typeCode: a.enrichment?.typeCode ?? null,
@@ -296,6 +306,7 @@ function applyClientFilters(
     destIcao: a.enrichment?.route?.destination?.icao ?? a.enrichment?.route?.destination?.iata ?? null,
     lastSeen: Date.now(),
     maxDistNm: a.distNm,
+    _klass: classifyAircraft(a),
   }));
 
   const airlines = Object.entries(
@@ -306,7 +317,8 @@ function applyClientFilters(
     }, {}),
   ).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 30);
 
-  let rows = rowsAll;
+  let rows: (SightingRow & { _klass: AircraftClass })[] = rowsAll;
+  if (klass) rows = rows.filter((r) => r._klass === klass);
   if (airline) rows = rows.filter((r) => r.operator === airline);
   if (q) {
     const needle = q.toLowerCase();

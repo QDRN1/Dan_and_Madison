@@ -223,6 +223,7 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
       sort?: "recent" | "farthest" | "first";
       q?: string;
       airline?: string;
+      klass?: "commercial" | "cargo" | "private" | "military" | "helicopter" | "other";
       offset?: string;
       limit?: string;
     };
@@ -231,6 +232,7 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
     sort: req.query.sort,
     q: req.query.q,
     airline: req.query.airline,
+    klass: req.query.klass,
     offset: req.query.offset != null ? Math.max(0, Number(req.query.offset) || 0) : undefined,
     limit: req.query.limit != null ? Math.min(500, Math.max(1, Number(req.query.limit) || 100)) : undefined,
   }));

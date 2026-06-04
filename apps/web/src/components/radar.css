@@ -968,6 +968,28 @@
   background: rgba(163, 201, 64, 0.08);
 }
 
+/* Aircraft-class toggle pills in Settings → Aircraft filter. */
+.class-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+.class-toggle:hover { border-color: var(--accent); }
+.class-toggle.on {
+  border-color: var(--accent);
+  background: rgba(163, 201, 64, 0.10);
+  color: var(--fg);
+}
+
 /* Radar-versary celebratory ribbon. Sits centered under the topbar. */
 .anniv-banner {
   position: absolute;

@@ -1,6 +1,7 @@
 import { readFileSync, statSync } from "node:fs";
 import type {
   Aircraft,
+  AircraftClass,
   FlaggedSighting,
   SightingFilter,
   SightingPage,
@@ -8,6 +9,7 @@ import type {
   SightingScope,
   Stats,
 } from "@qdrn/shared";
+import { classifyAircraft } from "@qdrn/shared";
 import { checkAll as checkAchievements } from "./achievements.js";
 import { TIMEZONE } from "./config.js";
 import { db, DB_PATH } from "./db.js";
@@ -125,10 +127,10 @@ let flaggedDay = today();
 
 const upsertSighting = db.prepare(
   `INSERT INTO sightings (hex, day, flight, type_code, type_name, operator,
-                          origin_icao, dest_icao, route_source,
+                          origin_icao, dest_icao, route_source, klass,
                           first_seen, last_seen, max_dist_nm)
    VALUES (@hex, @day, @flight, @type_code, @type_name, @operator,
-           @origin_icao, @dest_icao, @route_source,
+           @origin_icao, @dest_icao, @route_source, @klass,
            @ts, @ts, @dist)
    ON CONFLICT(hex, day) DO UPDATE SET
      last_seen    = @ts,
@@ -139,6 +141,7 @@ const upsertSighting = db.prepare(
      origin_icao  = COALESCE(@origin_icao, sightings.origin_icao),
      dest_icao    = COALESCE(@dest_icao, sightings.dest_icao),
      route_source = COALESCE(@route_source, sightings.route_source),
+     klass        = COALESCE(@klass, sightings.klass),
      max_dist_nm  = MAX(sightings.max_dist_nm, @dist)`,
 );
 
@@ -184,6 +187,7 @@ export function recordSighting(ac: Aircraft): void {
       origin_icao: originIcao,
       dest_icao: destIcao,
       route_source: route?.source ?? null,
+      klass: classifyAircraft(ac),
       ts: Date.now(),
       dist: ac.distNm ?? 0,
     } as any);
@@ -294,7 +298,7 @@ export function getStats(current: number): Stats {
 // ─── Popout queries (clickable stat cards) ───────────────────────────────────
 
 const SIGHTING_COLS = `hex, flight, type_code AS typeCode, type_name AS typeName,
-  operator, origin_icao AS originIcao, dest_icao AS destIcao,
+  operator, origin_icao AS originIcao, dest_icao AS destIcao, klass,
   first_seen AS firstSeen, last_seen AS lastSeen, max_dist_nm AS maxDistNm`;
 
 const notableListStmt = db.prepare(
@@ -340,6 +344,10 @@ export function listSightings(filter: SightingFilter): SightingPage {
     const like = `%${filter.q.trim().toLowerCase()}%`;
     whereParts.push("(LOWER(hex) LIKE ? OR LOWER(flight) LIKE ? OR LOWER(operator) LIKE ? OR LOWER(type_code) LIKE ? OR LOWER(type_name) LIKE ? OR LOWER(origin_icao) LIKE ? OR LOWER(dest_icao) LIKE ?)");
     params.push(like, like, like, like, like, like, like);
+  }
+  if (filter.klass) {
+    whereParts.push("klass = ?");
+    params.push(filter.klass);
   }
   const where = whereParts.join(" AND ");
 
@@ -400,6 +408,39 @@ export function listNotable(limit = 100): FlaggedSighting[] {
 }
 
 // ─── Auto-prune ──────────────────────────────────────────────────────────────
+
+/** Classify any rows that pre-date the `klass` column on startup so the
+ *  class filter doesn't silently exclude every historical sighting. Runs
+ *  in a single transaction; bounded by the row count so a runaway DB
+ *  can't stall startup forever. */
+function backfillKlassOnce(): void {
+  try {
+    const unclassified = db.prepare(`SELECT COUNT(*) n FROM sightings WHERE klass IS NULL`).get() as { n: number };
+    if (unclassified.n === 0) return;
+    const upd = db.prepare(`UPDATE sightings SET klass = ? WHERE rowid = ?`);
+    const rows = db.prepare(
+      `SELECT rowid AS rowid, hex, flight, type_code AS typeCode, operator FROM sightings WHERE klass IS NULL LIMIT 200000`
+    ).all() as { rowid: number; hex: string; flight: string | null; typeCode: string | null; operator: string | null }[];
+    const tx = db.transaction((batch: typeof rows) => {
+      for (const r of batch) {
+        const klass = classifyAircraft({
+          hex: r.hex,
+          flight: r.flight ?? undefined,
+          enrichment: {
+            operator: r.operator ?? undefined,
+            typeCode: r.typeCode ?? undefined,
+          },
+        });
+        upd.run(klass, r.rowid);
+      }
+    });
+    tx(rows);
+    console.log(`[stats] backfilled klass on ${rows.length} historical sightings`);
+  } catch (e) {
+    console.error("[stats] klass backfill failed:", (e as Error).message);
+  }
+}
+backfillKlassOnce();
 
 let lastPruneAt = 0;
 

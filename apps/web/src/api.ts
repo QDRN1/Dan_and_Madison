@@ -47,6 +47,7 @@ export const api = {
     if (f.sort)    p.set("sort",    f.sort);
     if (f.q)       p.set("q",       f.q);
     if (f.airline) p.set("airline", f.airline);
+    if (f.klass)   p.set("klass",   f.klass);
     if (f.offset != null) p.set("offset", String(f.offset));
     if (f.limit  != null) p.set("limit",  String(f.limit));
     return get<SightingPage>(`/stats/sightings?${p.toString()}`);
