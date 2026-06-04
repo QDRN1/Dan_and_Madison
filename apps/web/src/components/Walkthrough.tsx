@@ -72,6 +72,19 @@ const STEPS: Step[] = [
     },
   },
   {
+    // Owners see the actual Watch a flight card spotlighted; visitors hit
+    // the PIN-entry screen and see the explanation centered on the dim.
+    // Either way the copy explains the feature.
+    target: "[data-tour=\"watch-a-flight\"]",
+    title: "Watch a specific flight",
+    body: "Settings → Watch a flight. Type a callsign (DL2864, AAL100, BAW286), give it a name, set the date. When that exact flight crosses the radar, a big alert fires at the top and the plane is auto-selected on the map. Callsigns are validated and IATA prefixes auto-convert to ICAO so DL becomes DAL. Adding watches requires the device PIN.",
+    onShow: () => {
+      const st = useRadar.getState();
+      st.setDrawerOpen(true);
+      st.setDrawerPanel("settings");
+    },
+  },
+  {
     title: "You're set",
     body: "That's the express tour. Tap the ? button in the top bar anytime to replay this or open the FAQ. Enjoy your radar.",
     onShow: () => {

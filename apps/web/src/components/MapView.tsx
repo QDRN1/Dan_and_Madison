@@ -39,15 +39,27 @@ const ICON_PATHS: Record<IconTheme, string> = {
 
 /** Helicopter silhouette. Rendered as its own image (not part of the
  *  plane-theme rotation) so a B407 always reads as a helicopter even when
- *  the user has paws / hearts / UFOs selected for fixed-wing. Top-view
- *  body + tail boom + tail rotor + crossed main rotor bars, single fill. */
+ *  the user has paws / hearts / UFOs selected for fixed-wing.
+ *
+ *  Top-down geometry:
+ *   - Rounded oval cabin (the dome you see from above), nose at the top
+ *   - Tapering tail boom extending behind
+ *   - Perpendicular tail rotor at the end of the boom
+ *   - One main rotor blade spanning the full width — the blur of the
+ *     spinning disc reads better as a single horizontal line from above
+ *     than a + / X (which makes it look like a propeller plane). */
 const HELICOPTER_PATH =
-  "M 32 14 C 26 14 22 18 22 24 L 22 36 C 22 40 26 42 32 42 C 38 42 42 40 42 36 L 42 24 C 42 18 38 14 32 14 Z " +
-  "M 31 42 L 33 42 L 33 56 L 31 56 Z " +
-  "M 27 55 L 37 55 L 37 60 L 27 60 Z " +
-  "M 6 28 L 58 28 L 58 32 L 6 32 Z " +
-  "M 30 4 L 34 4 L 34 26 L 30 26 Z " +
-  "M 30 34 L 34 34 L 34 58 L 30 58 Z";
+  // Cabin (oval/teardrop pointing up, slight pointed nose)
+  "M 32 13 C 23 13 19 20 19 28 C 19 36 22 41 26 43 L 26 47 L 38 47 L 38 43 C 42 41 45 36 45 28 C 45 20 41 13 32 13 Z " +
+  // Tail boom (tapers from cabin to tail rotor)
+  "M 29 47 L 35 47 L 33.5 56 L 30.5 56 Z " +
+  // Tail rotor (perpendicular bar at end of boom)
+  "M 24 54 L 40 54 L 40 58 L 24 58 Z " +
+  // Main rotor — single blade across the full width
+  "M 2 26 L 62 26 L 62 30 L 2 30 Z " +
+  // Rotor hub — small visible dot on top of the cabin so the blade looks
+  // anchored rather than floating
+  "M 30 24 L 34 24 L 34 32 L 30 32 Z";
 
 function makeIconImage(path: string): { data: Uint8ClampedArray; width: number; height: number } {
   const vb = 64;

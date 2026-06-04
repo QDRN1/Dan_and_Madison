@@ -97,6 +97,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  box-sizing: border-box; /* match .live so the topbar row is one consistent height */
   width: 42px;
   height: 42px;
   border-radius: 12px;

@@ -588,7 +588,7 @@ function WatchesSection({ pin }: { pin: string }): JSX.Element {
   const fired = watches.filter((w) => w.fired_at).length;
 
   return (
-    <div className="set-card">
+    <div className="set-card" data-tour="watch-a-flight">
       <button className="set-collapse-head" onClick={() => setExpanded((v) => !v)} aria-expanded={expanded}>
         <span style={{ flex: 1, textAlign: "left", fontWeight: 700, fontSize: 13, letterSpacing: 0.3, textTransform: "uppercase", color: "var(--muted)" }}>
           Watch a flight

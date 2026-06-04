@@ -42,6 +42,33 @@ export function normalizeCallsign(raw: string): string {
   return s;
 }
 
+/** Cheap input validation — catches the obvious garbage ("ASDF", "12345",
+ *  "Dan's flight") without being so strict it rejects legitimate edge
+ *  cases (military designators, ferry callsigns, N-numbers). Real
+ *  callsigns: 2-3 letter airline prefix + 1-5 digits + optional 1-2
+ *  trailing letters, OR N-numbers (US private), OR military patterns. */
+export function validateCallsign(raw: string): { ok: true; normalized: string } | { ok: false; error: string } {
+  const s = raw.replace(/\s+/g, "").toUpperCase();
+  if (!s) return { ok: false, error: "Callsign is empty." };
+  if (s.length > 8) return { ok: false, error: "Callsign too long (max 8 characters)." };
+  if (!/^[A-Z0-9-]+$/.test(s)) {
+    return { ok: false, error: "Only letters, numbers and dashes allowed." };
+  }
+  if (!/[A-Z]/.test(s) || !/[0-9]/.test(s)) {
+    return { ok: false, error: "Needs letters and numbers (e.g. DL2864, AAL100, N123AB)." };
+  }
+  // Common shapes: airline (2-3 letters + digits + optional 1-2 trailing
+  // letters), N-number (N + digits + optional letters), military (letters/
+  // digits mix). The last regex is permissive.
+  const airline = /^[A-Z]{2,3}\d{1,5}[A-Z]{0,2}$/;
+  const nNumber = /^N\d{1,5}[A-Z]{0,2}$/;
+  const military = /^[A-Z]{2,5}\d{1,4}[A-Z]?$/;
+  if (!airline.test(s) && !nNumber.test(s) && !military.test(s)) {
+    return { ok: false, error: "Doesn't look like an airline callsign or tail number." };
+  }
+  return { ok: true, normalized: normalizeCallsign(s) };
+}
+
 export interface WatchRow {
   id: number;
   callsign: string;      // normalized
@@ -79,8 +106,9 @@ export function listWatches(): WatchRow[] {
 export function addWatch(input: {
   raw: string; name?: string; flightDate?: string; note?: string; expiresAt?: number;
 }): WatchRow {
-  const callsign = normalizeCallsign(input.raw);
-  if (!callsign) throw new Error("empty callsign");
+  const check = validateCallsign(input.raw);
+  if (!check.ok) throw new Error(check.error);
+  const callsign = check.normalized;
   // Validate the date if provided (YYYY-MM-DD)
   if (input.flightDate && !/^\d{4}-\d{2}-\d{2}$/.test(input.flightDate)) {
     throw new Error("flight_date must be YYYY-MM-DD");
