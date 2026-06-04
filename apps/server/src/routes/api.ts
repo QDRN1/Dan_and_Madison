@@ -1,4 +1,5 @@
 import { createConnection } from "node:net";
+import { execFile } from "node:child_process";
 import type { FastifyInstance } from "fastify";
 import type { AdminSettings, PublicConfig, SetupState, WifiNetwork, WifiScanResult } from "@qdrn/shared";
 
@@ -25,6 +26,26 @@ function netd<T = unknown>(req: Record<string, unknown>): Promise<T> {
     sock.on("error", (e) => finish(null, e));
     sock.write(JSON.stringify(req) + "\n");
     setTimeout(() => finish(null, new Error("netd timeout")), 30_000);
+  });
+}
+
+/** Run `docker compose ...` against the mounted host docker.sock from inside
+ *  the container. The Dockerfile installs docker CLI + compose plugin for
+ *  exactly this — the admin "Restart radar" path uses it so the radar can
+ *  restart itself without depending on the host-side qdrn-netd helper.
+ *  STACK_DIR points at the mount of /app/stack which holds the compose file. */
+function composeFromContainer(args: string[], timeoutMs = 60_000): Promise<{ ok: boolean; error?: string; stdout?: string }> {
+  const stackDir = process.env.STACK_DIR ?? "/app/stack";
+  return new Promise((resolve) => {
+    execFile(
+      "docker",
+      ["compose", "-f", `${stackDir}/docker-compose.yml`, ...args],
+      { timeout: timeoutMs },
+      (err, stdout, stderr) => {
+        if (err) resolve({ ok: false, error: (stderr || err.message).trim().slice(0, 400) });
+        else resolve({ ok: true, stdout: stdout.trim().slice(0, 400) });
+      },
+    );
   });
 }
 import {
@@ -392,21 +413,40 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
 
   app.post<{ Body: { pin?: string } }>("/admin/restart", async (req, reply) => {
     if (!adminPinOk(req.body?.pin)) return reply.code(401).send({ error: "owner_required" });
+    // Restart can happen directly from the container — we have the docker
+    // socket and the compose file mounted (see docker-compose.yml). Try
+    // that first so this works even if qdrn-netd on the host is old or
+    // missing. The container will die mid-response; the new one will be
+    // serving within a few seconds.
     try {
-      const r = await netd<{ ok: boolean; error?: string }>({ op: "restart" });
-      return r;
+      const r = await composeFromContainer(["restart", "qdrn-radar"]);
+      if (r.ok) return r;
+      // Compose failed — fall through to qdrn-netd as a backup path.
+    } catch { /* fall through */ }
+    try {
+      return await netd<{ ok: boolean; error?: string }>({ op: "restart" });
     } catch (e) {
-      return { ok: false, error: `netd unavailable: ${(e as Error).message}` };
+      return { ok: false, error: `Restart unavailable: ${(e as Error).message}. Make sure the docker socket is mounted, or update qdrn-netd on the host.` };
     }
   });
 
   app.post<{ Body: { pin?: string } }>("/admin/update", async (req, reply) => {
     if (!adminPinOk(req.body?.pin)) return reply.code(401).send({ error: "owner_required" });
+    // Pull update needs `git pull` on the host, which the container can't
+    // do directly — qdrn-netd is the only path. If qdrn-netd is too old to
+    // know the "update" op, give the user the exact command to run rather
+    // than a cryptic "unknown op" error.
     try {
       const r = await netd<{ ok: boolean; error?: string }>({ op: "update" });
+      if (!r.ok && /unknown op/i.test(r.error ?? "")) {
+        return {
+          ok: false,
+          error: "Host helper (qdrn-netd) is out of date and doesn't know the `update` op. SSH to the Pi and run:\n\n  sudo bash ~/Dan_and_Madison/provisioning/qdrn-netd/install-netd.sh\n\nThen this button will work.",
+        };
+      }
       return r;
     } catch (e) {
-      return { ok: false, error: `netd unavailable: ${(e as Error).message}` };
+      return { ok: false, error: `qdrn-netd unavailable: ${(e as Error).message}` };
     }
   });
 
