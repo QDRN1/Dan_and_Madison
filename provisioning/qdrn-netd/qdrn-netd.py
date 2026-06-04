@@ -16,6 +16,7 @@ import json
 import os
 import socket
 import subprocess
+import time
 
 SOCK_PATH = "/run/qdrn-net.sock"
 MAX_REQ = 16 * 1024
@@ -166,6 +167,12 @@ def update_radar(_req: dict) -> dict:
     We also export QDRN_BUILD_SHA / QDRN_BUILD_AT from the just-pulled
     commit so the Build line on the admin card matches what's running.
 
+    The docker compose step is detached (Popen + start_new_session) so
+    we can respond to the caller BEFORE it kills the container that's
+    holding the HTTP request. Without this, Cloudflare returns 502
+    every single time even though the update succeeded — the upstream
+    just stopped existing mid-response.
+
     qdrn-netd runs as root but the repo typically lives in a regular
     user's home dir (e.g. /home/skytrack/Dan_and_Madison). Git's CVE
     -2022-24765 protection refuses to operate when the invoking UID
@@ -188,11 +195,29 @@ def update_radar(_req: dict) -> dict:
         env["QDRN_BUILD_SHA"] = sha.stdout.strip()
     if build_at.returncode == 0 and build_at.stdout.strip():
         env["QDRN_BUILD_AT"] = build_at.stdout.strip()
-    compose = ["docker", "compose", "-f", os.path.join(repo, "docker-compose.yml")]
-    up = shell(compose + ["up", "-d", "--no-deps", "--build", "qdrn-radar"], timeout=900, env=env)
-    if up.returncode != 0:
-        return {"ok": False, "error": f"docker compose up: {(up.stderr or up.stdout).strip()[:400]}"}
-    return {"ok": True}
+    # Fire-and-forget: the build+recreate step kills the qdrn-radar
+    # container (the one calling us), so blocking on completion is
+    # guaranteed to return 502 to the browser. Log to a file so the
+    # outcome is recoverable for troubleshooting.
+    compose = ["docker", "compose", "-f", os.path.join(repo, "docker-compose.yml"),
+               "up", "-d", "--no-deps", "--build", "qdrn-radar"]
+    log_path = "/var/log/qdrn-update.log"
+    try:
+        log_fh = open(log_path, "a")
+        log_fh.write(f"\n--- {time.strftime('%Y-%m-%dT%H:%M:%S')} : {' '.join(compose)} ---\n")
+        log_fh.flush()
+    except OSError:
+        log_fh = subprocess.DEVNULL
+    subprocess.Popen(
+        compose,
+        env=env,
+        stdin=subprocess.DEVNULL,
+        stdout=log_fh,
+        stderr=subprocess.STDOUT,
+        start_new_session=True,
+    )
+    new_sha = sha.stdout.strip() or "?"
+    return {"ok": True, "sha": new_sha, "log": log_path}
 
 
 def handle(req: dict) -> dict:

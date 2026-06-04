@@ -99,7 +99,34 @@ export const api = {
     a38xSightings: { typeCode: string; flight: string | null; operator: string | null }[];
   }>("/admin/diagnose-achievements", { pin }),
   adminRestart:    (pin: string) => post<{ ok: boolean; error?: string }>("/admin/restart", { pin }),
-  adminUpdate:     (pin: string) => post<{ ok: boolean; error?: string }>("/admin/update", { pin }),
+  /** Pull update is special: qdrn-netd kicks off `docker compose up
+   *  --build` in a detached subprocess and returns immediately, so we
+   *  normally get a 200. But the upstream container starts dying as
+   *  soon as compose recreates it — if the response is mid-flight when
+   *  that happens, Cloudflare returns 502 (or the fetch is aborted).
+   *  We treat 502/504/network errors as "update in progress" rather
+   *  than failure, since the radar IS restarting; the UI then polls
+   *  device-info for a new build SHA to confirm. */
+  adminUpdate: async (pin: string): Promise<{ ok: boolean; error?: string; started?: boolean; sha?: string }> => {
+    try {
+      const res = await fetch(`${API}/admin/update`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ pin }),
+      });
+      if (res.status === 502 || res.status === 504) return { ok: true, started: true };
+      if (!res.ok) throw new Error(`/admin/update -> ${res.status}`);
+      return (await res.json()) as { ok: boolean; error?: string; sha?: string };
+    } catch (e) {
+      const msg = (e as Error).message;
+      // Network-level abort (e.g. container died before headers reached
+      // the browser) — same outcome as a 502.
+      if (/Failed to fetch|NetworkError|aborted|ERR_/.test(msg)) {
+        return { ok: true, started: true };
+      }
+      throw e;
+    }
+  },
   wifiList: (pin: string) =>
     post<{ ok: boolean; networks?: WifiNetwork[]; error?: string }>("/setup/wifi", { pin }),
   wifiAdd: (pin: string, ssid: string, password: string, priority: number) =>

@@ -868,11 +868,32 @@ function AdminSection({ pin }: { pin: string }): JSX.Element {
                       // so it bypasses the CONFIRM-typing requirement that
                       // Reset stats / Restart radar still use.
                       if (!window.confirm("Pull the latest update and restart the radar?")) return;
+                      const oldSha = info?.buildSha ?? null;
                       setBusy(true); setMsg("Pulling update…");
                       try {
                         const r = await api.adminUpdate(pin);
-                        setMsg(r.ok ? "Pull update ✓" : `Pull update failed: ${r.error ?? "unknown"}`);
-                        if (r.ok) setInfo(null);
+                        if (!r.ok) {
+                          setMsg(`Pull update failed: ${r.error ?? "unknown"}`);
+                          return;
+                        }
+                        // The container is restarting (or about to). Poll
+                        // device-info until we see a new build SHA, then
+                        // refresh the admin card. Bounded at ~90s so a
+                        // genuinely stuck build doesn't spin forever.
+                        setInfo(null);
+                        setMsg("Update started — rebuilding container, the radar will be back in ~30–60s…");
+                        for (let i = 0; i < 30; i++) {
+                          await new Promise((res) => setTimeout(res, 3000));
+                          try {
+                            const next = await api.deviceInfo(pin);
+                            if (next.buildSha && next.buildSha !== oldSha) {
+                              setInfo(next);
+                              setMsg(`Pull update ✓ now running ${next.buildSha.slice(0, 7)}`);
+                              return;
+                            }
+                          } catch { /* container still down — keep polling */ }
+                        }
+                        setMsg("Update kicked off, but the new container didn't come back within 90s. Refresh the page to check, or SSH and run `docker compose logs qdrn-radar`.");
                       } catch (e) {
                         setMsg(`Pull update failed: ${(e as Error).message}`);
                       } finally { setBusy(false); }
