@@ -22,9 +22,9 @@ MAX_REQ = 16 * 1024
 CMD_TIMEOUT = 25
 
 
-def shell(cmd: list[str], timeout: int = CMD_TIMEOUT) -> subprocess.CompletedProcess:
+def shell(cmd: list[str], timeout: int = CMD_TIMEOUT, env: dict | None = None) -> subprocess.CompletedProcess:
     try:
-        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=env)
     except subprocess.TimeoutExpired as e:
         return subprocess.CompletedProcess(cmd, 124, e.stdout or "", "timeout")
 
@@ -155,9 +155,16 @@ def restart_radar(_req: dict) -> dict:
 
 
 def update_radar(_req: dict) -> dict:
-    """`git pull` the repo + pull the latest container image + re-up the
-    radar. Only the radar container churns (`--no-deps`) so the feeders
-    stay running.
+    """`git pull` the repo + rebuild the radar container from the freshly
+    pulled source. Only the radar container churns (`--no-deps`) so the
+    feeders stay running.
+
+    qdrn-radar is a locally-built image (no registry), so the old
+    `docker compose pull qdrn-radar` step erroneously tried to fetch
+    qdrn-radar:latest from Docker Hub and failed with "pull access
+    denied". `up -d --build` builds it from the working tree instead.
+    We also export QDRN_BUILD_SHA / QDRN_BUILD_AT from the just-pulled
+    commit so the Build line on the admin card matches what's running.
 
     qdrn-netd runs as root but the repo typically lives in a regular
     user's home dir (e.g. /home/skytrack/Dan_and_Madison). Git's CVE
@@ -168,16 +175,23 @@ def update_radar(_req: dict) -> dict:
     repo = os.environ.get("QDRN_REPO", "/opt/qdrn")
     if not os.path.isdir(repo):
         return {"ok": False, "error": f"QDRN_REPO not found: {repo}"}
+    git_safe = ["git", "-c", f"safe.directory={repo}", "-C", repo]
+    pull = shell(git_safe + ["pull", "--ff-only"], timeout=120)
+    if pull.returncode != 0:
+        return {"ok": False, "error": f"git pull: {(pull.stderr or pull.stdout).strip()[:400]}"}
+    # Stamp the build with the SHA we just pulled, so the admin "Build"
+    # line reflects what's actually running.
+    sha = shell(git_safe + ["rev-parse", "--short", "HEAD"], timeout=10)
+    build_at = shell(git_safe + ["log", "-1", "--format=%cI", "HEAD"], timeout=10)
+    env = os.environ.copy()
+    if sha.returncode == 0 and sha.stdout.strip():
+        env["QDRN_BUILD_SHA"] = sha.stdout.strip()
+    if build_at.returncode == 0 and build_at.stdout.strip():
+        env["QDRN_BUILD_AT"] = build_at.stdout.strip()
     compose = ["docker", "compose", "-f", os.path.join(repo, "docker-compose.yml")]
-    steps = [
-        (["git", "-c", f"safe.directory={repo}", "-C", repo, "pull", "--ff-only"], 120),
-        (compose + ["pull", "qdrn-radar"], 600),
-        (compose + ["up", "-d", "--no-deps", "qdrn-radar"], 600),
-    ]
-    for cmd, timeout in steps:
-        r = shell(cmd, timeout=timeout)
-        if r.returncode != 0:
-            return {"ok": False, "error": f"{' '.join(cmd)}: {(r.stderr or r.stdout).strip()[:400]}"}
+    up = shell(compose + ["up", "-d", "--no-deps", "--build", "qdrn-radar"], timeout=900, env=env)
+    if up.returncode != 0:
+        return {"ok": False, "error": f"docker compose up: {(up.stderr or up.stdout).strip()[:400]}"}
     return {"ok": True}
 
 

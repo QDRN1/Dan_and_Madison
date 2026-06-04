@@ -914,7 +914,7 @@ function AdminSection({ pin }: { pin: string }): JSX.Element {
           </button>
           <p className="muted" style={{ fontSize: 11, marginTop: 0 }}>
             Reset stats wipes the sightings/flagged/coverage/achievements tables (settings + WiFi profiles are kept).
-            Pull update runs <code>git pull &amp;&amp; docker compose pull &amp;&amp; up -d</code> on the host.
+            Pull update runs <code>git pull &amp;&amp; docker compose up -d --build qdrn-radar</code> on the host.
           </p>
           {msg && <div className="muted" style={{ fontSize: 12, whiteSpace: "pre-wrap" }}>{msg}</div>}
         </div>
