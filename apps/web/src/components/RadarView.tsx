@@ -14,6 +14,7 @@ import { Settings } from "./Settings";
 import { SightingsPopout } from "./SightingsPopout";
 import { ThemeToggle } from "./ThemeToggle";
 import { Toasts } from "./Toasts";
+import { HelpButton, Walkthrough } from "./Walkthrough";
 import { WatchAlert } from "./WatchAlert";
 
 type Panel = "flights" | "stats" | "achievements" | "settings";
@@ -25,8 +26,12 @@ export function RadarView(): JSX.Element {
   const stormOn = useRadar((s) => s.stormOverlay);
   const toggleStorm = useRadar((s) => s.toggleStorm);
   const openPopout = useRadar((s) => s.openPopout);
-  const [open, setOpen] = useState(false);
-  const [panel, setPanel] = useState<Panel>("flights");
+  // Drawer state lives in the store so the walkthrough engine can open it
+  // and switch tabs imperatively.
+  const open = useRadar((s) => s.drawerOpen);
+  const setOpen = useRadar((s) => s.setDrawerOpen);
+  const panel = useRadar((s) => s.drawerPanel) as Panel;
+  const setPanel = useRadar((s) => s.setDrawerPanel);
 
   const brand = config?.brand;
   const rx = config?.receiver;
@@ -38,7 +43,7 @@ export function RadarView(): JSX.Element {
       <MapView />
 
       <header className="topbar">
-        <div className="brand">
+        <div className="brand" data-tour="brand">
           <span className="brand-plate">
             {brand?.logoUrl && <img src={brand.logoUrl} alt={brand?.name ?? "QDRN Radar"} onError={(e) => (e.currentTarget.style.display = "none")} />}
           </span>
@@ -49,8 +54,11 @@ export function RadarView(): JSX.Element {
           </div>
         </div>
         <div className="spacer" />
-        <LiveCountPill onClick={() => openPopout({ kind: "in-view", title: "Tracking now" })} />
+        <span data-tour="tracking-pill">
+          <LiveCountPill onClick={() => openPopout({ kind: "in-view", title: "Tracking now" })} />
+        </span>
         <button
+          data-tour="storm-btn"
           className={`iconbtn glass${stormOn ? " active" : ""}`}
           onClick={toggleStorm}
           aria-label="Storm radar"
@@ -59,9 +67,11 @@ export function RadarView(): JSX.Element {
           {stormOn ? "⛈️" : "🌦️"}
         </button>
         <ThemeToggle className="glass" />
+        <HelpButton />
         <button
+          data-tour="menu-btn"
           className={`iconbtn glass${open ? " active" : ""}`}
-          onClick={() => setOpen((v) => !v)}
+          onClick={() => setOpen(!open)}
           aria-label="Menu"
           title="Menu"
         >
@@ -78,9 +88,15 @@ export function RadarView(): JSX.Element {
           </button>
         </div>
 
-        <div className="drawer-tabs">
+        <div className="drawer-tabs" data-tour="drawer-tabs">
           {(["flights", "stats", "achievements", "settings"] as const).map((p) => (
-            <button key={p} className={`tab${panel === p ? " active" : ""}`} onClick={() => setPanel(p)} title={p}>
+            <button
+              key={p}
+              data-tour={`tab-${p}`}
+              className={`tab${panel === p ? " active" : ""}`}
+              onClick={() => setPanel(p)}
+              title={p}
+            >
               {p === "flights" ? "Flights" : p === "stats" ? "Stats" : p === "achievements" ? "🏆" : "Settings"}
             </button>
           ))}
@@ -101,6 +117,7 @@ export function RadarView(): JSX.Element {
       <SightingsPopout />
       <AltitudeLegendWrapper />
       <WatchAlert />
+      <Walkthrough />
     </div>
   );
 }

@@ -57,9 +57,21 @@ interface RadarState {
   liveStatus: LiveStatus;
   /** Most recent flight-watch hit, surfaced as a big alert until dismissed. */
   watchHit: FlightWatchHit | null;
+  /** Drawer state lifted out of RadarView so the walkthrough engine can
+   *  open it imperatively during the tour. */
+  drawerOpen: boolean;
+  drawerPanel: "flights" | "stats" | "achievements" | "settings";
+  /** Walkthrough engine state. Steps live in a separate module. */
+  tourStep: number | null;
   setConfig: (c: PublicConfig) => void;
   setLiveStatus: (s: LiveStatus) => void;
   setWatchHit: (h: FlightWatchHit | null) => void;
+  setDrawerOpen: (b: boolean) => void;
+  setDrawerPanel: (p: "flights" | "stats" | "achievements" | "settings") => void;
+  startTour: () => void;
+  endTour: () => void;
+  nextTourStep: () => void;
+  prevTourStep: () => void;
   applySnapshot: (s: LiveSnapshot) => void;
   select: (hex: string | null) => void;
   setSelectedTrail: (t: TrailPoint[] | null) => void;
@@ -86,10 +98,19 @@ export const useRadar = create<RadarState>((set, get) => ({
   popout: null,
   liveStatus: "connecting",
   watchHit: null,
+  drawerOpen: false,
+  drawerPanel: "flights",
+  tourStep: null,
 
   setConfig: (config) => set({ config }),
   setLiveStatus: (liveStatus) => set({ liveStatus }),
   setWatchHit: (watchHit) => set({ watchHit }),
+  setDrawerOpen: (drawerOpen) => set({ drawerOpen }),
+  setDrawerPanel: (drawerPanel) => set({ drawerPanel }),
+  startTour: () => set({ tourStep: 0 }),
+  endTour: () => set({ tourStep: null }),
+  nextTourStep: () => set((s) => ({ tourStep: s.tourStep == null ? 0 : s.tourStep + 1 })),
+  prevTourStep: () => set((s) => ({ tourStep: s.tourStep != null && s.tourStep > 0 ? s.tourStep - 1 : 0 })),
 
   applySnapshot: (s) => {
     const byHex: Record<string, Aircraft> = {};

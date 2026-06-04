@@ -73,10 +73,12 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 7px 12px;
+  height: 42px;          /* match .iconbtn so the topbar reads as one row */
+  padding: 0 14px;
   border-radius: 999px;
   font-weight: 700;
   font-size: 13px;
+  box-sizing: border-box;
 }
 .dot {
   width: 8px;
@@ -1233,7 +1235,7 @@
     padding-top: calc(8px + env(safe-area-inset-top));
   }
   .topbar .live .muted { display: none; }
-  .topbar .live { padding: 6px 10px; font-size: 12px; }
+  .topbar .live { padding: 0 12px; font-size: 12px; height: 38px; }
   .iconbtn { width: 38px; height: 38px; font-size: 16px; }
   .brand-greeting { font-size: 13px; }
 }
@@ -1433,4 +1435,95 @@
   border-radius: 10px;
   border: 1px solid var(--border);
   background: var(--input-bg);
+}
+
+/* ─── Walkthrough overlay + spotlight + card ──────────────────────────── */
+.tour-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: auto;
+  /* No bg here — the spotlight does the dimming via box-shadow so the
+   * highlighted target stays bright. */
+}
+.tour-spotlight {
+  position: fixed;
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 9999px rgba(0, 8, 24, 0.72),
+    0 0 0 3px var(--accent),
+    0 0 28px rgba(163, 201, 64, 0.5);
+  pointer-events: none;
+  transition: top 0.18s ease, left 0.18s ease, width 0.18s ease, height 0.18s ease;
+}
+/* When there's no target (intro / outro modal), dim the full screen. */
+.tour-spotlight-full {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 8, 24, 0.72);
+  pointer-events: none;
+}
+.tour-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0, 8, 24, 0.6);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tour-card {
+  position: fixed;
+  z-index: 51;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--accent);
+  border-radius: 14px;
+  padding: 16px 18px;
+  width: 340px;
+  max-width: calc(100vw - 32px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+.tour-card-step {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 4px;
+}
+.tour-card-title {
+  font-size: 17px;
+  font-weight: 800;
+  margin-bottom: 6px;
+  color: var(--accent);
+}
+.tour-card-body {
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0 0 14px;
+}
+.tour-card-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.tour-card-actions .btn { padding: 8px 14px; font-size: 13px; }
+
+.tour-faq {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 55vh;
+  margin-top: 8px;
+}
+.tour-faq-q {
+  font-weight: 700;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.tour-faq-a {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
 }

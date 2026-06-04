@@ -37,7 +37,19 @@ const ICON_PATHS: Record<IconTheme, string> = {
     "M36 16 C35 16 34 17 34 18 C34 19 35 20 36 20 C37 20 38 19 38 18 C38 17 37 16 36 16 Z",
 };
 
-function makePlaneImage(kind: IconTheme = "plane"): { data: Uint8ClampedArray; width: number; height: number } {
+/** Helicopter silhouette. Rendered as its own image (not part of the
+ *  plane-theme rotation) so a B407 always reads as a helicopter even when
+ *  the user has paws / hearts / UFOs selected for fixed-wing. Top-view
+ *  body + tail boom + tail rotor + crossed main rotor bars, single fill. */
+const HELICOPTER_PATH =
+  "M 32 14 C 26 14 22 18 22 24 L 22 36 C 22 40 26 42 32 42 C 38 42 42 40 42 36 L 42 24 C 42 18 38 14 32 14 Z " +
+  "M 31 42 L 33 42 L 33 56 L 31 56 Z " +
+  "M 27 55 L 37 55 L 37 60 L 27 60 Z " +
+  "M 6 28 L 58 28 L 58 32 L 6 32 Z " +
+  "M 30 4 L 34 4 L 34 26 L 30 26 Z " +
+  "M 30 34 L 34 34 L 34 58 L 30 58 Z";
+
+function makeIconImage(path: string): { data: Uint8ClampedArray; width: number; height: number } {
   const vb = 64;
   const scale = 4;
   const W = vb * scale;
@@ -49,9 +61,25 @@ function makePlaneImage(kind: IconTheme = "plane"): { data: Uint8ClampedArray; w
   ctx.fillStyle = "#ffffff";
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  const p = new Path2D(ICON_PATHS[kind]);
-  ctx.fill(p);
+  ctx.fill(new Path2D(path));
   return { data: ctx.getImageData(0, 0, W, W).data, width: W, height: W };
+}
+
+function makePlaneImage(kind: IconTheme = "plane"): { data: Uint8ClampedArray; width: number; height: number } {
+  return makeIconImage(ICON_PATHS[kind]);
+}
+
+function makeHelicopterImage(): { data: Uint8ClampedArray; width: number; height: number } {
+  return makeIconImage(HELICOPTER_PATH);
+}
+
+/** ADS-B emitter category A7 is rotorcraft (helicopters). Also fall back
+ *  to a type-code regex covering the major civil + military helicopters
+ *  so a plane without category info still reads correctly. */
+function isHelicopter(category?: string, typeCode?: string): boolean {
+  if (category === "A7") return true;
+  if (!typeCode) return false;
+  return /\b(R22|R44|R66|EC[0-9]|H1[35]5|H125|H145|H160|H175|UH-?60|AS3[0-9]|AS65|AS50|AS55|S70|S76|S92|EC1|B407|B412|B429|B505|A109|A119|A139|MD500|MD600|MD9|R[0-9]|HEL|UH-|CH-|MI-?[0-9]|KA[0-9])\b/i.test(typeCode);
 }
 
 function ringCoords(lon: number, lat: number, nm: number): [number, number][] {
@@ -123,6 +151,8 @@ export function MapView(): JSX.Element {
     // vanish after a dark/light switch). Recreate it fresh to be safe.
     if (map.hasImage("plane")) map.removeImage("plane");
     map.addImage("plane", makePlaneImage(icon), { sdf: true, pixelRatio: 4 });
+    if (map.hasImage("helicopter")) map.removeImage("helicopter");
+    map.addImage("helicopter", makeHelicopterImage(), { sdf: true, pixelRatio: 4 });
 
     // Surface airport runways much further out (from z4, country-scale) and
     // hammer the contrast so major airports are visible without zooming in.
@@ -392,7 +422,10 @@ export function MapView(): JSX.Element {
         type: "symbol",
         source: "aircraft",
         layout: {
-          "icon-image": "plane",
+          // Per-feature icon: each row carries "plane" or "helicopter" in
+          // its `icon` property so a B407 / EC135 / UH-60 reads as a heli
+          // regardless of the user's plane theme.
+          "icon-image": ["get", "icon"],
           "icon-size": 0.7,
           "icon-rotate": ["get", "track"],
           "icon-rotation-alignment": "map",
@@ -461,6 +494,11 @@ export function MapView(): JSX.Element {
             track: a.track ?? 0,
             color: altColor(altFeet(a)),
             selected: a.hex === cur.selectedHex ? 1 : 0,
+            // Picks the helicopter SDF when this airframe is a rotorcraft;
+            // otherwise the user's plane-theme image. Helicopters don't
+            // rotate around the heading the same way (rotor disc is the
+            // top view) but rotating the icon still gives a directional cue.
+            icon: isHelicopter(a.category, a.enrichment?.typeCode) ? "helicopter" : "plane",
             // 1 when the plane is fill-in from adsb.lol, 0 for local radar.
             // The ac-plane layer reads this to dim off-radar icons.
             offRadar: a.source === "adsblol" ? 1 : 0,
