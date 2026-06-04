@@ -54,9 +54,7 @@ export function RadarView(): JSX.Element {
           </div>
         </div>
         <div className="spacer" />
-        <span data-tour="tracking-pill">
-          <LiveCountPill onClick={() => openPopout({ kind: "in-view", title: "Tracking now" })} />
-        </span>
+        <LiveCountPill onClick={() => openPopout({ kind: "in-view", title: "Tracking now" })} />
         <button
           data-tour="storm-btn"
           className={`iconbtn glass${stormOn ? " active" : ""}`}
@@ -143,6 +141,7 @@ function LiveCountPill({ onClick }: { onClick: () => void }): JSX.Element {
   const isLive = status === "live" || status === "connecting";
   return (
     <button
+      data-tour="tracking-pill"
       className={`live glass live-pill${isLive ? "" : " live-pill-offline"}`}
       onClick={onClick}
       title={isLive ? "Show all aircraft in view" : `Live feed ${status} — snapshot may be stale`}

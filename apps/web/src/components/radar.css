@@ -70,15 +70,19 @@
   flex: 1;
 }
 .live {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 7px;
   height: 42px;          /* match .iconbtn so the topbar reads as one row */
+  min-height: 42px;      /* defense against descender / line-height pushing growth */
   padding: 0 14px;
   border-radius: 999px;
   font-weight: 700;
   font-size: 13px;
+  line-height: 1;        /* button default line-height was forcing taller render in some browsers */
   box-sizing: border-box;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
 }
 .dot {
   width: 8px;
