@@ -48,7 +48,11 @@ const ICON_PATHS: Record<IconTheme, string> = {
  *  a 256-pixel raster with pixelRatio 4 (256/4=64). Whatever size the
  *  source PNG is, we divide by 64 to land on the same on-screen scale
  *  when icon-size 0.7 is applied. Without this the icon renders at the
- *  raw pixel size, which on a 512-px source comes out ~8× too big. */
+ *  raw pixel size, which on a 512-px source comes out ~8× too big.
+ *
+ *  Async loadImage finishes AFTER the symbol layer is added, so we
+ *  trigger a repaint to flush features that already reference
+ *  "helicopter" — otherwise they stay blank until the next data update. */
 function loadHelicopterImage(map: MlMap, basePath: string): void {
   const url = `${basePath}/brand/helicopter.png`;
   map.loadImage(url).then((res) => {
@@ -57,7 +61,11 @@ function loadHelicopterImage(map: MlMap, basePath: string): void {
     const pixelRatio = Math.max(1, Math.round(width / 64));
     if (map.hasImage("helicopter")) map.removeImage("helicopter");
     map.addImage("helicopter", res.data, { sdf: false, pixelRatio });
-  }).catch(() => { /* fall back to the plane image if the asset 404s */ });
+    map.triggerRepaint();
+  }).catch((e) => {
+    // eslint-disable-next-line no-console
+    console.warn("helicopter PNG load failed:", e);
+  });
 }
 
 function makeIconImage(path: string): { data: Uint8ClampedArray; width: number; height: number } {
@@ -577,6 +585,15 @@ export function MapView(): JSX.Element {
       updateSource();
       updateTrail();
       updateCoverage();
+    });
+
+    // Fallback: if a feature references "helicopter" before the async
+    // PNG load finishes (or that load failed silently in the past),
+    // MapLibre fires styleimagemissing — re-attempt the load on demand.
+    map.on("styleimagemissing", (e: { id: string }) => {
+      if (e.id !== "helicopter") return;
+      if (!config) return;
+      loadHelicopterImage(map, config.basePath);
     });
 
     return () => {
