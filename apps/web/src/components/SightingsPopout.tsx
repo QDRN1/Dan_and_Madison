@@ -15,6 +15,7 @@ export function SightingsPopout(): JSX.Element | null {
   const close = useRadar((s) => s.closePopout);
   const select = useRadar((s) => s.select);
   const live = useRadar((s) => s.aircraft);
+  const hidden = useRadar((s) => s.hiddenClasses);
 
   const [scope, setScope] = useState<SightingScope>(popout?.scope ?? "today");
   const [sort, setSort] = useState<SightingSort>(popout?.sort ?? "recent");
@@ -51,12 +52,15 @@ export function SightingsPopout(): JSX.Element | null {
   }, [q]);
 
   // In-view popout reads from the live aircraft store and re-filters on
-  // every snapshot. Cheap — purely client-side, no flash.
+  // every snapshot. Cheap — purely client-side, no flash. Settings' class
+  // filter pre-hides categories unless the popout's own klass dropdown
+  // narrows further (the dropdown overrides — e.g. user hid helicopters
+  // globally but explicitly pulled up "Helicopters" here).
   useEffect(() => {
     if (!popout || popout.kind !== "in-view") return;
-    setPage(applyClientFilters(live, debouncedQ, airline, klass || undefined, sort));
+    setPage(applyClientFilters(live, debouncedQ, airline, klass || undefined, hidden, sort));
     setLoading(false);
-  }, [popout, debouncedQ, airline, klass, sort, live]);
+  }, [popout, debouncedQ, airline, klass, hidden, sort, live]);
 
   // Sightings + farthest popouts hit the server. `live` is deliberately NOT
   // in the dep list — including it (as I previously did) re-fired the fetch
@@ -288,12 +292,17 @@ function routeLabel(r: SightingRow): string {
   return "—";
 }
 
-/** Mirror the server-side filter for the "in-view" live source. */
+/** Mirror the server-side filter for the "in-view" live source.
+ *  `klass` is the popout dropdown (override single-class).
+ *  `hidden` is the Settings → Aircraft filter (default exclude). The
+ *  override wins: picking "Helicopters" in the dropdown unhides the
+ *  helicopter rows even if the Settings filter is hiding them. */
 function applyClientFilters(
   live: Aircraft[],
   q: string,
   airline: string,
   klass: AircraftClass | undefined,
+  hidden: Set<AircraftClass>,
   sort: SightingSort,
 ): SightingPage {
   const rowsAll: (SightingRow & { _klass: AircraftClass })[] = live.map((a) => ({
@@ -319,6 +328,7 @@ function applyClientFilters(
 
   let rows: (SightingRow & { _klass: AircraftClass })[] = rowsAll;
   if (klass) rows = rows.filter((r) => r._klass === klass);
+  else if (hidden.size > 0) rows = rows.filter((r) => !hidden.has(r._klass));
   if (airline) rows = rows.filter((r) => r.operator === airline);
   if (q) {
     const needle = q.toLowerCase();

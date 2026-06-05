@@ -1,5 +1,5 @@
 import { memo, useEffect, useState } from "react";
-import type { Stats } from "@qdrn/shared";
+import { classifyAircraft, type Stats } from "@qdrn/shared";
 import { api } from "../api";
 import { useRadar } from "../store";
 
@@ -12,6 +12,8 @@ export function StatsPanel(): JSX.Element {
   const [stats, setStats] = useState<Stats | null>(null);
   const select = useRadar((s) => s.select);
   const openPopout = useRadar((s) => s.openPopout);
+  const liveAircraft = useRadar((s) => s.aircraft);
+  const hidden = useRadar((s) => s.hiddenClasses);
 
   useEffect(() => {
     let alive = true;
@@ -23,10 +25,18 @@ export function StatsPanel(): JSX.Element {
 
   if (!stats) return <div className="muted" style={{ padding: 12 }}>Loading stats…</div>;
 
+  // The server reports total tracked; the user expects the "In view now"
+  // count to match what they actually see on the map / list once they've
+  // hidden classes in Settings. Recompute from live + hiddenClasses so
+  // all three views stay in sync.
+  const inViewCount = hidden.size === 0
+    ? stats.current
+    : liveAircraft.filter((a) => a.lat != null && !hidden.has(classifyAircraft(a))).length;
+
   return (
     <div className="scroll" style={{ flex: 1, display: "flex", flexDirection: "column", gap: 12, marginRight: -8, paddingRight: 8 }}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <Card label="In view now"    value={stats.current}                 onClick={() => openPopout({ kind: "in-view",  title: "In view now" })} />
+        <Card label="In view now"    value={inViewCount}                   onClick={() => openPopout({ kind: "in-view",  title: "In view now" })} />
         <Card label="Seen today"     value={stats.todayUnique}             onClick={() => openPopout({ kind: "sightings", scope: "today", sort: "recent", title: "Seen today" })} />
         <Card label="Farthest today" value={`${stats.maxRangeNmToday} nm`} onClick={() => openPopout({ kind: "farthest",  scope: "today", sort: "farthest", title: "Farthest tracked" })} />
         <Card label="All-time"       value={stats.allTimeUnique}           onClick={() => openPopout({ kind: "sightings", scope: "all",   sort: "recent", title: "All-time unique" })} />
