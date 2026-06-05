@@ -29,20 +29,21 @@ export function routeMatchesPosition(ac: Aircraft, route: Route): boolean {
 /** When a free route comes back reversed (adsb.lol returns the standing
  *  pattern entry as origin→destination but the plane is actually flying
  *  the return leg), the position check passes — the plane is still "on
- *  the line", just near the wrong endpoint. Detect by combining two
- *  signals:
+ *  the line", just near the wrong endpoint.
  *
- *    1. Trail: earliest point is much closer to the named destination
- *       than to the named origin → plane came from "destination".
- *    2. Heading: bearing(plane → named origin) is closer to the live
- *       track than bearing(plane → named destination) → plane is
- *       pointing at "origin".
+ *  The clean signal is the plane's velocity vector dotted with the route
+ *  vector (origin → destination). If the plane is moving in the route
+ *  direction, dot > 0; if it's moving opposite, dot < 0. This holds at
+ *  any point along the route, even near an endpoint where bearings get
+ *  noisy. Two backup signals fire when the velocity check is too weak
+ *  to call (turning, slow):
  *
- *  Either alone is noisy (short trails near an airport; orbiting planes
- *  with all over the map headings) so we require at least one strong
- *  signal and no contradicting signal. Returns a SWAPPED route when
- *  reversed, the original otherwise. */
-export function orientRoute(ac: Aircraft, route: Route, trail: TrailPoint[]): Route {
+ *    - Altitude + proximity: descending fast within 25 nm of "origin"
+ *      means "origin" is actually the destination → reversed.
+ *    - Climbing fast within 25 nm of "destination" → reversed.
+ *
+ *  Returns a SWAPPED route when reversed, the original otherwise. */
+export function orientRoute(ac: Aircraft, route: Route, _trail: TrailPoint[]): Route {
   const o = route.origin;
   const d = route.destination;
   if (!o?.lat || !o?.lon || !d?.lat || !d?.lon) return route;
@@ -50,42 +51,32 @@ export function orientRoute(ac: Aircraft, route: Route, trail: TrailPoint[]): Ro
   const routeLen = haversineNm(o.lat, o.lon, d.lat, d.lon);
   if (routeLen < 30) return route; // short hops are noisy
 
-  let trailVote = 0; // +1 = forward, -1 = reversed
-  if (trail.length >= 2) {
-    const first = trail[0]!;
-    const fromO = haversineNm(first.lat, first.lon, o.lat, o.lon);
-    const fromD = haversineNm(first.lat, first.lon, d.lat, d.lon);
-    // Need a clear asymmetry — at least 25 nm AND a 1.5× ratio — so a
-    // plane orbiting at the receiver doesn't randomly flip the route.
-    if (fromO + 25 < fromD && fromD / Math.max(fromO, 1) > 1.5) trailVote = +1;
-    else if (fromD + 25 < fromO && fromO / Math.max(fromD, 1) > 1.5) trailVote = -1;
+  let vote = 0; // negative = reversed
+
+  // Primary: dot(velocity, route). Both as unit vectors in (east, north).
+  if (ac.track != null && ac.gs != null && ac.gs > 50) {
+    const routeBrg = bearingDeg(o.lat, o.lon, d.lat, d.lon);
+    const vx = Math.sin((ac.track * Math.PI) / 180);
+    const vy = Math.cos((ac.track * Math.PI) / 180);
+    const rx = Math.sin((routeBrg * Math.PI) / 180);
+    const ry = Math.cos((routeBrg * Math.PI) / 180);
+    const dot = vx * rx + vy * ry; // [-1, 1]
+    if (dot < -0.4) vote -= 2;       // moving distinctly opposite
+    else if (dot > 0.4) vote += 2;   // moving distinctly along
   }
 
-  let headingVote = 0;
-  if (ac.track != null && ac.gs != null && ac.gs > 60) {
+  // Backup: altitude + proximity. baroRate is fpm.
+  if (ac.baroRate != null) {
     const distO = haversineNm(ac.lat, ac.lon, o.lat, o.lon);
     const distD = haversineNm(ac.lat, ac.lon, d.lat, d.lon);
-    // Only trust bearing when both endpoints are far enough that the
-    // bearing math is stable (>10 nm from each).
-    if (distO > 10 && distD > 10) {
-      const bToO = bearingDeg(ac.lat, ac.lon, o.lat, o.lon);
-      const bToD = bearingDeg(ac.lat, ac.lon, d.lat, d.lon);
-      const dO = angleDiff(ac.track, bToO);
-      const dD = angleDiff(ac.track, bToD);
-      // Plane is pointing at one endpoint with a clear margin.
-      if (dD + 30 < dO) headingVote = +1;
-      else if (dO + 30 < dD) headingVote = -1;
-    }
+    if (ac.baroRate < -600 && distO < 25 && distD > 50) vote -= 1; // descending into "origin"
+    if (ac.baroRate < -600 && distD < 25 && distO > 50) vote += 1; // descending into "destination"
+    if (ac.baroRate >  800 && distD < 25 && distO > 50) vote -= 1; // climbing away from "destination"
+    if (ac.baroRate >  800 && distO < 25 && distD > 50) vote += 1; // climbing away from "origin"
   }
 
-  // Require either a strong trail signal OR a strong heading signal
-  // without contradiction. If both signals agree on reversed, definitely
-  // flip; if they disagree, leave it alone (let the operator/source be).
-  const reversed =
-    (trailVote === -1 && headingVote !== +1) ||
-    (headingVote === -1 && trailVote !== +1);
-  if (!reversed) return route;
-  return { ...route, origin: d, destination: o };
+  if (vote <= -2) return { ...route, origin: d, destination: o };
+  return route;
 }
 
 /** Apply the position sanity check to an Enrichment in-place. Returns a
@@ -134,12 +125,6 @@ function bearingDeg(lat1: number, lon1: number, lat2: number, lon2: number): num
   const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(λ2 - λ1);
   const θ = Math.atan2(y, x);
   return ((θ * 180) / Math.PI + 360) % 360;
-}
-
-/** Shortest unsigned angle between two bearings, [0,180]. */
-function angleDiff(a: number, b: number): number {
-  const d = Math.abs(a - b) % 360;
-  return d > 180 ? 360 - d : d;
 }
 
 /** First sample where the plane is in the air. Walks forward from the start
