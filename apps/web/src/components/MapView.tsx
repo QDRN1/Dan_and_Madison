@@ -47,7 +47,7 @@ const ICON_PATHS: Record<IconTheme, string> = {
  *  pixelRatio matches the plane icon's logical 64x64 size. The plane is
  *  a 256-pixel raster with pixelRatio 4 (256/4=64). Whatever size the
  *  source PNG is, we divide by 64 to land on the same on-screen scale
- *  when icon-size 0.7 is applied. Without this the icon renders at the
+ *  when icon-size 0.55 is applied. Without this the icon renders at the
  *  raw pixel size, which on a 512-px source comes out ~8× too big.
  *
  *  Async loadImage finishes AFTER the symbol layer is added, so we
@@ -442,7 +442,7 @@ export function MapView(): JSX.Element {
           // its `icon` property so a B407 / EC135 / UH-60 reads as a heli
           // regardless of the user's plane theme.
           "icon-image": ["get", "icon"],
-          "icon-size": 0.7,
+          "icon-size": 0.55,
           "icon-rotate": ["get", "track"],
           "icon-rotation-alignment": "map",
           "icon-allow-overlap": true,
