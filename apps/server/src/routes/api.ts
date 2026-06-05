@@ -151,9 +151,11 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
     const upgraded = await enrich(hex, ac.flight, { paid: true, lat: ac.lat, lon: ac.lon, track: ac.track });
     if (upgraded) ac.enrichment = upgraded;
     // Position sanity check — strip stale free-source routes that don't
-    // match where the plane actually is.
-    ac.enrichment = withRouteSanity(ac, ac.enrichment);
-    return { ...ac, trail: store.getTrail(hex) };
+    // match where the plane actually is, and swap origin/destination
+    // when the trail says adsb.lol handed us the wrong leg.
+    const detailTrail = store.getTrail(hex);
+    ac.enrichment = withRouteSanity(ac, ac.enrichment, detailTrail);
+    return { ...ac, trail: detailTrail };
   });
 
   // Extended track: pre-pends adsb.lol's historical trace to the session trail
@@ -176,7 +178,7 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
     // entirely when the route doesn't match the plane's track. Sending a
     // bad route here would put it back into the UI even after the detail
     // endpoint stripped it.
-    const sanity = ac && ac.enrichment ? withRouteSanity(ac, ac.enrichment) : undefined;
+    const sanity = ac && ac.enrichment ? withRouteSanity(ac, ac.enrichment, trail) : undefined;
     const route = sanity?.route;
     const derivedRoute = ac && route ? deriveFreeRouteTimes(ac, route, trail) : undefined;
     return reply.send({

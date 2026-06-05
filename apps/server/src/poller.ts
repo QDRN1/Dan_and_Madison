@@ -81,7 +81,7 @@ class AircraftStore extends EventEmitter {
     // on the happy path — withRouteSanity returns the same object if
     // nothing changed.
     const sanitized = merged.map((a) => {
-      const e2 = withRouteSanity(a, a.enrichment);
+      const e2 = withRouteSanity(a, a.enrichment, this.trails.get(a.hex) ?? []);
       return e2 === a.enrichment ? a : { ...a, enrichment: e2 };
     });
     return {
