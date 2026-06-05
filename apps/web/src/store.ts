@@ -7,6 +7,18 @@ export type IconTheme = "plane" | "paw" | "heart" | "ufo";
 
 export type PopoutKind = "in-view" | "sightings" | "farthest" | "notable";
 
+export interface UpdateJob {
+  /** Wall-clock ms when the job started — drives the big elapsed timer. */
+  startedAt: number;
+  /** Current short-form status, e.g. "Pulling code…", "Building…", "Waiting for radar to come back…". */
+  phase: string;
+  /** Build SHA the radar was running BEFORE the update. Used to detect
+   *  when the new container has come up (server returns a different SHA). */
+  oldSha: string | null;
+  /** Set if something went wrong — overlay flips to error mode. */
+  error?: string;
+}
+
 /** When the user drills into a stat card we open a full-screen popout. State
  *  lives in the store so the popout mounts at the root of RadarView (outside
  *  the drawer's transformed bounds) and `onBack` returns to whichever drawer
@@ -82,6 +94,13 @@ interface RadarState {
   drawerPanel: "flights" | "stats" | "achievements" | "settings";
   hiddenClasses: Set<AircraftClass>;
   toggleHiddenClass: (k: AircraftClass) => void;
+  /** Active "Pull update + restart" job. Non-null = the full-screen
+   *  UpdateOverlay is up, showing a live elapsed timer and the current
+   *  phase. The Settings card kicks it off and polls device-info to
+   *  decide when to reload. */
+  updateJob: UpdateJob | null;
+  setUpdateJob: (j: UpdateJob | null) => void;
+  setUpdatePhase: (phase: string) => void;
   /** Walkthrough engine state. Steps live in a separate module. */
   tourStep: number | null;
   setConfig: (c: PublicConfig) => void;
@@ -122,6 +141,7 @@ export const useRadar = create<RadarState>((set, get) => ({
   drawerOpen: false,
   drawerPanel: "stats",
   hiddenClasses: initialHiddenClasses(),
+  updateJob: null,
   tourStep: null,
 
   setConfig: (config) => set({ config }),
@@ -135,6 +155,8 @@ export const useRadar = create<RadarState>((set, get) => ({
     try { localStorage.setItem("qdrn-hidden-classes", JSON.stringify([...next])); } catch { /* ignore */ }
     return { hiddenClasses: next };
   }),
+  setUpdateJob: (updateJob) => set({ updateJob }),
+  setUpdatePhase: (phase) => set((s) => (s.updateJob ? { updateJob: { ...s.updateJob, phase } } : {})),
   startTour: () => set({ tourStep: 0 }),
   endTour: () => set({ tourStep: null }),
   nextTourStep: () => set((s) => ({ tourStep: s.tourStep == null ? 0 : s.tourStep + 1 })),

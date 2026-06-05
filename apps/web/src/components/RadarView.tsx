@@ -12,6 +12,7 @@ import { AltitudeLegend } from "./AltitudeLegend";
 import { SeasonalOverlay } from "./SeasonalOverlay";
 import { Settings } from "./Settings";
 import { SightingsPopout } from "./SightingsPopout";
+import { UpdateOverlay } from "./UpdateOverlay";
 import { ThemeToggle } from "./ThemeToggle";
 import { Toasts } from "./Toasts";
 import { HelpButton, Walkthrough } from "./Walkthrough";
@@ -113,6 +114,7 @@ export function RadarView(): JSX.Element {
       <SeasonalOverlay />
       <Toasts />
       <SightingsPopout />
+      <UpdateOverlay />
       <AltitudeLegendWrapper />
       <WatchAlert />
       <Walkthrough />

@@ -806,6 +806,8 @@ function AdminSection({ pin }: { pin: string }): JSX.Element {
   const [info, setInfo] = useState<DeviceInfo | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const setUpdateJob = useRadar((s) => s.setUpdateJob);
+  const setUpdatePhase = useRadar((s) => s.setUpdatePhase);
 
   useEffect(() => {
     if (!expanded || info) return;
@@ -863,41 +865,7 @@ function AdminSection({ pin }: { pin: string }): JSX.Element {
               Reset stats
             </button>
             <button className="btn" style={{ flex: 1, minWidth: 140 }} disabled={busy}
-                    onClick={async () => {
-                      // Pull update isn't destructive (just a software update)
-                      // so it bypasses the CONFIRM-typing requirement that
-                      // Reset stats / Restart radar still use.
-                      if (!window.confirm("Pull the latest update and restart the radar?")) return;
-                      const oldSha = info?.buildSha ?? null;
-                      setBusy(true); setMsg("Pulling update…");
-                      try {
-                        const r = await api.adminUpdate(pin);
-                        if (!r.ok) {
-                          setMsg(`Pull update failed: ${r.error ?? "unknown"}`);
-                          return;
-                        }
-                        // The container is restarting (or about to). Poll
-                        // device-info until we see a new build SHA, then
-                        // refresh the admin card. Bounded at ~90s so a
-                        // genuinely stuck build doesn't spin forever.
-                        setInfo(null);
-                        setMsg("Update started — rebuilding container, the radar will be back in ~30–60s…");
-                        for (let i = 0; i < 30; i++) {
-                          await new Promise((res) => setTimeout(res, 3000));
-                          try {
-                            const next = await api.deviceInfo(pin);
-                            if (next.buildSha && next.buildSha !== oldSha) {
-                              setInfo(next);
-                              setMsg(`Pull update ✓ now running ${next.buildSha.slice(0, 7)}`);
-                              return;
-                            }
-                          } catch { /* container still down — keep polling */ }
-                        }
-                        setMsg("Update kicked off, but the new container didn't come back within 90s. Refresh the page to check, or SSH and run `docker compose logs qdrn-radar`.");
-                      } catch (e) {
-                        setMsg(`Pull update failed: ${(e as Error).message}`);
-                      } finally { setBusy(false); }
-                    }}>
+                    onClick={() => void runUpdate({ pin, oldSha: info?.buildSha ?? null, setUpdateJob, setUpdatePhase, setMsg, setBusy, setInfo })}>
               Pull update + restart
             </button>
             <button className="btn" style={{ flex: 1, minWidth: 140 }} disabled={busy}
@@ -953,6 +921,82 @@ interface DeviceInfo {
   achievementsEarned: number; achievementsTotal: number;
   buildSha?: string;
   buildAt?: string;
+}
+
+/** Drives the full-screen UpdateOverlay: kicks off /admin/update,
+ *  walks the user through Pulling → Building → Waiting → Reloading,
+ *  and reloads the page automatically once a new build SHA appears.
+ *  Pulled out of the click handler so the polling loop is readable
+ *  and the overlay state stays in sync with reality. */
+async function runUpdate(args: {
+  pin: string;
+  oldSha: string | null;
+  setUpdateJob: (j: import("../store").UpdateJob | null) => void;
+  setUpdatePhase: (phase: string) => void;
+  setMsg: (m: string) => void;
+  setBusy: (b: boolean) => void;
+  setInfo: (i: DeviceInfo | null) => void;
+}): Promise<void> {
+  const { pin, oldSha, setUpdateJob, setUpdatePhase, setMsg, setBusy, setInfo } = args;
+  if (!window.confirm("Pull the latest update and restart the radar?")) return;
+  setBusy(true);
+  setMsg("");
+  setInfo(null);
+  setUpdateJob({ startedAt: Date.now(), phase: "Pulling latest code…", oldSha });
+  try {
+    const r = await api.adminUpdate(pin);
+    if (!r.ok) {
+      setUpdateJob({ startedAt: Date.now(), phase: "", oldSha, error: r.error ?? "Unknown error from /admin/update" });
+      setMsg(`Pull update failed: ${r.error ?? "unknown"}`);
+      return;
+    }
+    setUpdatePhase("Rebuilding container… (~30–60s)");
+    // Poll device-info every 2s for up to ~3 minutes. The container
+    // is being recreated, so most polls error out — that's expected.
+    // We're waiting for: (1) a successful response AND (2) a buildSha
+    // different from the one we started with. Once we see it, switch
+    // to "Reloading…" and refresh the page so the new bundle loads.
+    const deadline = Date.now() + 180_000;
+    let sawDown = false;
+    while (Date.now() < deadline) {
+      await new Promise((res) => setTimeout(res, 2000));
+      try {
+        const next = await api.deviceInfo(pin);
+        if (!next.buildSha) continue;
+        if (sawDown && next.buildSha !== oldSha) {
+          setUpdatePhase(`New build ${next.buildSha.slice(0, 7)} — reloading…`);
+          await new Promise((res) => setTimeout(res, 800));
+          window.location.reload();
+          return;
+        }
+        if (next.buildSha !== oldSha) {
+          // SHA flipped without us ever seeing the container go down
+          // (very fast build). Still a success.
+          setUpdatePhase(`New build ${next.buildSha.slice(0, 7)} — reloading…`);
+          await new Promise((res) => setTimeout(res, 800));
+          window.location.reload();
+          return;
+        }
+        // Same SHA still — keep waiting for the new container to swap in.
+        setUpdatePhase("Building image…");
+      } catch {
+        // Container is mid-restart; this is the "Waiting for radar to
+        // come back…" phase. Most of the elapsed time happens here.
+        sawDown = true;
+        setUpdatePhase("Waiting for radar to come back…");
+      }
+    }
+    setUpdateJob({
+      startedAt: Date.now(),
+      phase: "",
+      oldSha,
+      error: "Update didn't finish within 3 minutes. SSH and check `docker compose logs qdrn-radar`. Tap Refresh to try loading anyway.",
+    });
+  } catch (e) {
+    setUpdateJob({ startedAt: Date.now(), phase: "", oldSha, error: (e as Error).message });
+  } finally {
+    setBusy(false);
+  }
 }
 
 function PinSection({ currentPin, onChanged }: { currentPin: string; onChanged: (newPin: string) => void }): JSX.Element {
