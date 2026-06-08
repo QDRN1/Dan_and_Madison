@@ -26,56 +26,71 @@ export function routeMatchesPosition(ac: Aircraft, route: Route): boolean {
   return detour <= allowed;
 }
 
-/** When a free route comes back reversed (adsb.lol returns the standing
- *  pattern entry as origin→destination but the plane is actually flying
- *  the return leg), the position check passes — the plane is still "on
- *  the line", just near the wrong endpoint.
+/** Detect which direction the plane is flying along this route by looking
+ *  at the physical evidence: a flight is low at origin (just took off /
+ *  climbing), high at cruise, then low at destination (descending / on
+ *  short final). If the named "origin" matches the descending-near-low
+ *  end of the picture (or the named "destination" matches the just-
+ *  climbed-out end), the route is reversed and we swap.
  *
- *  The clean signal is the plane's velocity vector dotted with the route
- *  vector (origin → destination). If the plane is moving in the route
- *  direction, dot > 0; if it's moving opposite, dot < 0. This holds at
- *  any point along the route, even near an endpoint where bearings get
- *  noisy. Two backup signals fire when the velocity check is too weak
- *  to call (turning, slow):
+ *  Three signals, evaluated independently — the first one that fires
+ *  wins. Each is grounded in the physics of a flight, not a heuristic.
  *
- *    - Altitude + proximity: descending fast within 25 nm of "origin"
- *      means "origin" is actually the destination → reversed.
- *    - Climbing fast within 25 nm of "destination" → reversed.
+ *   1. NOW + descending + low: the plane is approaching landing here.
+ *      Whichever named endpoint we're near IS the destination.
+ *
+ *   2. NOW + climbing + low: the plane just took off. Whichever named
+ *      endpoint we're near IS the origin.
+ *
+ *   3. TRAIL: earliest low-altitude trail point IS near the origin (it
+ *      caught the climb-out). Compare to named endpoints to identify
+ *      which is which.
  *
  *  Returns a SWAPPED route when reversed, the original otherwise. */
-export function orientRoute(ac: Aircraft, route: Route, _trail: TrailPoint[]): Route {
+export function orientRoute(ac: Aircraft, route: Route, trail: TrailPoint[]): Route {
   const o = route.origin;
   const d = route.destination;
   if (!o?.lat || !o?.lon || !d?.lat || !d?.lon) return route;
+  // Degenerate route (same airport at both ends) — nothing to orient,
+  // the merge or sanity step will strip it.
+  if (o.icao && d.icao && o.icao === d.icao) return route;
   if (ac.lat == null || ac.lon == null) return route;
   const routeLen = haversineNm(o.lat, o.lon, d.lat, d.lon);
   if (routeLen < 30) return route; // short hops are noisy
 
-  let vote = 0; // negative = reversed
+  const swap = (): Route => ({ ...route, origin: d, destination: o });
 
-  // Primary: dot(velocity, route). Both as unit vectors in (east, north).
-  if (ac.track != null && ac.gs != null && ac.gs > 50) {
-    const routeBrg = bearingDeg(o.lat, o.lon, d.lat, d.lon);
-    const vx = Math.sin((ac.track * Math.PI) / 180);
-    const vy = Math.cos((ac.track * Math.PI) / 180);
-    const rx = Math.sin((routeBrg * Math.PI) / 180);
-    const ry = Math.cos((routeBrg * Math.PI) / 180);
-    const dot = vx * rx + vy * ry; // [-1, 1]
-    if (dot < -0.4) vote -= 2;       // moving distinctly opposite
-    else if (dot > 0.4) vote += 2;   // moving distinctly along
-  }
-
-  // Backup: altitude + proximity. baroRate is fpm.
-  if (ac.baroRate != null) {
+  // Signal 1 + 2: what's the plane doing right now?
+  const alt = typeof ac.altBaro === "number" ? ac.altBaro : ac.altBaro === "ground" ? 0 : null;
+  if (alt != null && alt < 12000) {
     const distO = haversineNm(ac.lat, ac.lon, o.lat, o.lon);
     const distD = haversineNm(ac.lat, ac.lon, d.lat, d.lon);
-    if (ac.baroRate < -600 && distO < 25 && distD > 50) vote -= 1; // descending into "origin"
-    if (ac.baroRate < -600 && distD < 25 && distO > 50) vote += 1; // descending into "destination"
-    if (ac.baroRate >  800 && distD < 25 && distO > 50) vote -= 1; // climbing away from "destination"
-    if (ac.baroRate >  800 && distO < 25 && distD > 50) vote += 1; // climbing away from "origin"
+    const nearO = distO < 30 && distD > distO * 3;
+    const nearD = distD < 30 && distO > distD * 3;
+    const descending = ac.baroRate != null && ac.baroRate < -400;
+    const climbing   = ac.baroRate != null && ac.baroRate >  600;
+    // Approaching landing here → this endpoint is destination.
+    if (descending && nearO) return swap();           // "origin" is actually destination
+    if (descending && nearD) return route;            // route already correct
+    // Just took off here → this endpoint is origin.
+    if (climbing && nearD) return swap();             // "destination" is actually origin
+    if (climbing && nearO) return route;              // route already correct
   }
 
-  if (vote <= -2) return { ...route, origin: d, destination: o };
+  // Signal 3: did the trail catch the climb-out? A single low-altitude
+  // trail point is enough — that point is necessarily near the airport
+  // the plane took off from.
+  const earliestLow = trail.find((p) => p.alt != null && p.alt > 0 && p.alt < 5000);
+  if (earliestLow) {
+    const dToO = haversineNm(earliestLow.lat, earliestLow.lon, o.lat, o.lon);
+    const dToD = haversineNm(earliestLow.lat, earliestLow.lon, d.lat, d.lon);
+    // Trail's first low point is the climb-out, which IS the origin.
+    // If it's close to named "destination" and far from named "origin",
+    // the route is reversed.
+    if (dToD < 30 && dToO > dToD * 3) return swap();
+    if (dToO < 30 && dToD > dToO * 3) return route;
+  }
+
   return route;
 }
 
@@ -91,6 +106,12 @@ export function withRouteSanity(ac: Aircraft, e: Enrichment | undefined, trail: 
   // actual filed plan for this leg. Only sanity-check the free sources.
   const src = e.route.source;
   if (src === "flightaware" || src === "gateway") return e;
+  // Degenerate same-airport route (adsb.lol's rotation collapsed to MSP→MSP
+  // because pickLeg lost a track and fell back to first→last of a round-trip
+  // rotation). Strip it so the UI shows nothing rather than nonsense.
+  const oIcao = e.route.origin?.icao;
+  const dIcao = e.route.destination?.icao;
+  if (oIcao && dIcao && oIcao === dIcao) return { ...e, route: undefined, routeStale: true };
   const oriented = orientRoute(ac, e.route, trail);
   if (oriented !== e.route) {
     // Direction was flipped. Apply the position check against the new
@@ -114,17 +135,6 @@ function haversineNm(lat1: number, lon1: number, lat2: number, lon2: number): nu
     Math.sin(dLat / 2) ** 2 +
     Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(a)) * NM_PER_KM;
-}
-
-/** Initial great-circle bearing from point 1 to point 2, in degrees [0,360). */
-function bearingDeg(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const φ1 = toRad(lat1), φ2 = toRad(lat2);
-  const λ1 = toRad(lon1), λ2 = toRad(lon2);
-  const y = Math.sin(λ2 - λ1) * Math.cos(φ2);
-  const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(λ2 - λ1);
-  const θ = Math.atan2(y, x);
-  return ((θ * 180) / Math.PI + 360) % 360;
 }
 
 /** First sample where the plane is in the air. Walks forward from the start

@@ -46,7 +46,15 @@ export function pickLeg<T extends { lat?: number; lon?: number }>(
   const n = airports.length;
   if (n === 0) return {};
   if (n === 1) return { destination: airports[0] };
-  if (pos.track == null) return { origin: airports[0], destination: airports[n - 1] };
+  if (pos.track == null) {
+    // No track — fall back to first→last. Dedupe consecutive same-airport
+    // entries first so a round-trip rotation like [MSP, MSN, MSP] doesn't
+    // collapse to MSP→MSP. orientRoute will sort out direction once a
+    // track shows up.
+    const unique = dedupeByCoord(airports);
+    if (unique.length >= 2) return { origin: unique[0], destination: unique[unique.length - 1] };
+    return { origin: airports[0], destination: airports[n - 1] };
+  }
 
   let destIdx = -1;
   let best = Infinity;
@@ -59,7 +67,44 @@ export function pickLeg<T extends { lat?: number; lon?: number }>(
       destIdx = i;
     }
   }
-  if (destIdx < 0) return { origin: airports[0], destination: airports[n - 1] };
+  if (destIdx < 0) {
+    const unique = dedupeByCoord(airports);
+    if (unique.length >= 2) return { origin: unique[0], destination: unique[unique.length - 1] };
+    return { origin: airports[0], destination: airports[n - 1] };
+  }
   const originIdx = destIdx > 0 ? destIdx - 1 : destIdx + 1;
-  return { origin: airports[originIdx], destination: airports[destIdx] };
+  const dest = airports[destIdx];
+  let origin = airports[originIdx];
+  // Track-picked destination collided with the only adjacent airport (a
+  // round-trip rotation where origin and destination resolve to the same
+  // physical airport). Walk further along the rotation to find a distinct
+  // one — otherwise we'd report MSP→MSP.
+  if (
+    origin && dest &&
+    typeof origin.lat === "number" && typeof dest.lat === "number" &&
+    Math.abs(origin.lat - dest.lat) < 0.01 && Math.abs(origin.lon! - dest.lon!) < 0.01
+  ) {
+    for (let i = 0; i < n; i++) {
+      if (i === destIdx) continue;
+      const a = airports[i];
+      if (!a || typeof a.lat !== "number" || typeof a.lon !== "number") continue;
+      if (Math.abs(a.lat - dest.lat) < 0.01 && Math.abs(a.lon - dest.lon!) < 0.01) continue;
+      origin = a;
+      break;
+    }
+  }
+  return { origin, destination: dest };
+}
+
+function dedupeByCoord<T extends { lat?: number; lon?: number }>(airports: T[]): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const a of airports) {
+    if (!a || typeof a.lat !== "number" || typeof a.lon !== "number") continue;
+    const key = `${a.lat.toFixed(2)},${a.lon.toFixed(2)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(a);
+  }
+  return out;
 }
