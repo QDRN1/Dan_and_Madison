@@ -228,17 +228,28 @@ def update_radar(_req: dict) -> dict:
     # container (the one calling us), so blocking on completion is
     # guaranteed to return 502 to the browser. Log to a file so the
     # outcome is recoverable for troubleshooting.
-    compose = ["docker", "compose", "-f", os.path.join(repo, "docker-compose.yml"),
-               "up", "-d", "--no-deps", "--build", "qdrn-radar"]
+    #
+    # We also reinstall qdrn-netd after the container build so the host
+    # helper picks up any new ops shipped in this update — otherwise
+    # the next "Update Device" click would hit "unknown op" again until
+    # someone SSH'd in. install-netd.sh runs `systemctl restart` on us,
+    # which would kill an in-flight HTTP request, so the chain runs as
+    # a detached shell so it survives our exit.
     log_path = "/var/log/qdrn-update.log"
+    install_netd = os.path.join(repo, "provisioning", "qdrn-netd", "install-netd.sh")
+    chain = (
+        f"docker compose -f {os.path.join(repo, 'docker-compose.yml')} "
+        f"up -d --no-deps --build qdrn-radar; "
+        f"bash {install_netd}"
+    )
     try:
         log_fh = open(log_path, "a")
-        log_fh.write(f"\n--- {time.strftime('%Y-%m-%dT%H:%M:%S')} : {' '.join(compose)} ---\n")
+        log_fh.write(f"\n--- {time.strftime('%Y-%m-%dT%H:%M:%S')} : {chain} ---\n")
         log_fh.flush()
     except OSError:
         log_fh = subprocess.DEVNULL
     subprocess.Popen(
-        compose,
+        ["/bin/bash", "-lc", chain],
         env=env,
         stdin=subprocess.DEVNULL,
         stdout=log_fh,

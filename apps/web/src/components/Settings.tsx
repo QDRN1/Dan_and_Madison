@@ -860,45 +860,56 @@ function DeviceAdminSection({ pin }: { pin: string }): JSX.Element {
   /** Check first, then ask. Re-runs `git fetch` so the prompt reflects
    *  reality even if the cached daily check is stale, and never starts
    *  a build when there's nothing to apply (the old flow dropped you
-   *  into the full-screen countdown even on no-op updates). */
+   *  into the full-screen countdown even on no-op updates).
+   *
+   *  Falls back to a generic confirm when update-check itself fails —
+   *  most commonly because qdrn-netd on the host is too old to know
+   *  the `update-check` op (chicken-and-egg: the very update we want
+   *  to install is what would teach it). Running the update anyway in
+   *  that case is the right call. */
   async function handleUpdateClick(): Promise<void> {
     setBusy(true);
     setMsg("Checking for updates…");
-    let r: Awaited<ReturnType<typeof api.adminUpdateCheck>>;
+    let r: Awaited<ReturnType<typeof api.adminUpdateCheck>> | null = null;
+    let checkErr: string | null = null;
     try {
       r = await api.adminUpdateCheck(pin);
+      if (!r.ok) checkErr = r.error ?? "unknown error";
     } catch (e) {
-      setMsg(`Couldn't check for updates: ${(e as Error).message}`);
-      setBusy(false);
-      return;
-    }
-    if (!r.ok) {
-      setMsg(`Update check failed: ${r.error ?? "unknown"}`);
-      setBusy(false);
-      return;
-    }
-    const data = { behind: r.behind, latestSha: r.latestSha, latestSubject: r.latestSubject, latestAt: r.latestAt };
-    setCheck(data);
-    try { localStorage.setItem("qdrn-update-check", JSON.stringify({ at: Date.now(), data })); } catch { /* ignore */ }
-
-    if (r.behind === 0) {
-      const sha = r.latestSha?.slice(0, 7) ?? info?.buildSha?.slice(0, 7) ?? "?";
-      setMsg(`Already on the latest build (${sha}). Nothing to update.`);
-      setBusy(false);
-      return;
+      checkErr = (e as Error).message;
     }
 
-    const subject = r.latestSubject ? `\n\nLatest change:\n  ${r.latestSubject}` : "";
-    const proceed = window.confirm(
-      `${r.behind} update${r.behind === 1 ? "" : "s"} available.${subject}\n\n` +
-      "Do you want to proceed? The radar will be unavailable for ~30–60 seconds " +
-      "while the new image builds, then the page will auto-reload.",
+    if (r && r.ok) {
+      const data = { behind: r.behind, latestSha: r.latestSha, latestSubject: r.latestSubject, latestAt: r.latestAt };
+      setCheck(data);
+      try { localStorage.setItem("qdrn-update-check", JSON.stringify({ at: Date.now(), data })); } catch { /* ignore */ }
+      if (r.behind === 0) {
+        const sha = r.latestSha?.slice(0, 7) ?? info?.buildSha?.slice(0, 7) ?? "?";
+        setMsg(`Already on the latest build (${sha}). Nothing to update.`);
+        setBusy(false);
+        return;
+      }
+      const subject = r.latestSubject ? `\n\nLatest change:\n  ${r.latestSubject}` : "";
+      const proceed = window.confirm(
+        `${r.behind} update${r.behind === 1 ? "" : "s"} available.${subject}\n\n` +
+        "Do you want to proceed? The radar will be unavailable for ~30–60 seconds " +
+        "while the new image builds, then the page will auto-reload.",
+      );
+      if (!proceed) { setMsg("Update cancelled."); setBusy(false); return; }
+      await runUpdate({ pin, oldSha: info?.buildSha ?? null, setUpdateJob, setUpdatePhase, setMsg, setBusy, setInfo });
+      return;
+    }
+
+    // Check failed — most likely qdrn-netd on the host hasn't been
+    // restarted since this app started using update-check. Offer to
+    // pull anyway; the update itself usually fixes the helper too.
+    const proceedAnyway = window.confirm(
+      `Couldn't check for updates: ${checkErr}\n\n` +
+      "This usually means the host helper (qdrn-netd) hasn't been refreshed yet. " +
+      "Proceed with the update anyway? If there are updates, they'll be pulled and " +
+      "the radar will rebuild in ~30–60 seconds and auto-reload.",
     );
-    if (!proceed) {
-      setMsg("Update cancelled.");
-      setBusy(false);
-      return;
-    }
+    if (!proceedAnyway) { setMsg(`Update check failed: ${checkErr}`); setBusy(false); return; }
     await runUpdate({ pin, oldSha: info?.buildSha ?? null, setUpdateJob, setUpdatePhase, setMsg, setBusy, setInfo });
   }
 
