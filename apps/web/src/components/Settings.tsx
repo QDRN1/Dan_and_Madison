@@ -857,6 +857,51 @@ function DeviceAdminSection({ pin }: { pin: string }): JSX.Element {
     } finally { setBusy(false); }
   }
 
+  /** Check first, then ask. Re-runs `git fetch` so the prompt reflects
+   *  reality even if the cached daily check is stale, and never starts
+   *  a build when there's nothing to apply (the old flow dropped you
+   *  into the full-screen countdown even on no-op updates). */
+  async function handleUpdateClick(): Promise<void> {
+    setBusy(true);
+    setMsg("Checking for updates…");
+    let r: Awaited<ReturnType<typeof api.adminUpdateCheck>>;
+    try {
+      r = await api.adminUpdateCheck(pin);
+    } catch (e) {
+      setMsg(`Couldn't check for updates: ${(e as Error).message}`);
+      setBusy(false);
+      return;
+    }
+    if (!r.ok) {
+      setMsg(`Update check failed: ${r.error ?? "unknown"}`);
+      setBusy(false);
+      return;
+    }
+    const data = { behind: r.behind, latestSha: r.latestSha, latestSubject: r.latestSubject, latestAt: r.latestAt };
+    setCheck(data);
+    try { localStorage.setItem("qdrn-update-check", JSON.stringify({ at: Date.now(), data })); } catch { /* ignore */ }
+
+    if (r.behind === 0) {
+      const sha = r.latestSha?.slice(0, 7) ?? info?.buildSha?.slice(0, 7) ?? "?";
+      setMsg(`Already on the latest build (${sha}). Nothing to update.`);
+      setBusy(false);
+      return;
+    }
+
+    const subject = r.latestSubject ? `\n\nLatest change:\n  ${r.latestSubject}` : "";
+    const proceed = window.confirm(
+      `${r.behind} update${r.behind === 1 ? "" : "s"} available.${subject}\n\n` +
+      "Do you want to proceed? The radar will be unavailable for ~30–60 seconds " +
+      "while the new image builds, then the page will auto-reload.",
+    );
+    if (!proceed) {
+      setMsg("Update cancelled.");
+      setBusy(false);
+      return;
+    }
+    await runUpdate({ pin, oldSha: info?.buildSha ?? null, setUpdateJob, setUpdatePhase, setMsg, setBusy, setInfo });
+  }
+
   const updateAvailable = (check?.behind ?? 0) > 0;
 
   return (
@@ -905,7 +950,7 @@ function DeviceAdminSection({ pin }: { pin: string }): JSX.Element {
               className={`btn ${updateAvailable ? "btn-primary" : ""}`}
               style={{ flex: 1, minWidth: 140 }}
               disabled={busy}
-              onClick={() => void runUpdate({ pin, oldSha: info?.buildSha ?? null, setUpdateJob, setUpdatePhase, setMsg, setBusy, setInfo })}
+              onClick={() => void handleUpdateClick()}
             >
               Update Device
             </button>
@@ -1012,8 +1057,8 @@ interface DeviceInfo {
 /** Drives the full-screen UpdateOverlay: kicks off /admin/update,
  *  walks the user through Pulling → Building → Waiting → Reloading,
  *  and reloads the page automatically once a new build SHA appears.
- *  Pulled out of the click handler so the polling loop is readable
- *  and the overlay state stays in sync with reality. */
+ *  Confirmation happens upstream in handleUpdateClick (with the actual
+ *  changelog) — this function assumes the user already said yes. */
 async function runUpdate(args: {
   pin: string;
   oldSha: string | null;
@@ -1024,7 +1069,6 @@ async function runUpdate(args: {
   setInfo: (i: DeviceInfo | null) => void;
 }): Promise<void> {
   const { pin, oldSha, setUpdateJob, setUpdatePhase, setMsg, setBusy, setInfo } = args;
-  if (!window.confirm("Pull the latest update and restart the radar?")) return;
   setBusy(true);
   setMsg("");
   setInfo(null);
