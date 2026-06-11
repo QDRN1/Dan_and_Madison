@@ -188,8 +188,11 @@ export function Settings(): JSX.Element {
       {/* 8. AeroAPI usage + spend guard (direct mode; the gateway meters its own) */}
       {!(s.gateway.url && s.gateway.key) && <AeroSection pin={pin} aero={s.aero} onChanged={() => void load(pin)} />}
 
-      {/* Owner-only admin (master PIN) */}
-      {isMaster && <AdminSection pin={pin} />}
+      {/* Device admin (any PIN) — uptime/build, Update Device, Restart Radar. */}
+      <DeviceAdminSection pin={pin} />
+
+      {/* Super-admin (master PIN only) — destructive operations. */}
+      {isMaster && <SuperAdminSection pin={pin} />}
 
       {/* 9. Change PIN */}
       <PinSection currentPin={pin} onChanged={(p) => { sessionStorage.setItem(PIN_KEY, p); setPin(p); }} />
@@ -801,35 +804,60 @@ function IconThemeSection(): JSX.Element {
   );
 }
 
-function AdminSection({ pin }: { pin: string }): JSX.Element {
+/** Device admin available to every PIN holder (the friend included).
+ *  Surfaces the device-info block, Update Device (with an "Update
+ *  available" badge when the host is behind origin/main), and Restart
+ *  Radar. Update-available is polled at most once a day per browser. */
+function DeviceAdminSection({ pin }: { pin: string }): JSX.Element {
   const [expanded, setExpanded] = useState(false);
   const [info, setInfo] = useState<DeviceInfo | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const [check, setCheck] = useState<{ behind: number; latestSha?: string; latestSubject?: string; latestAt?: string } | null>(null);
   const setUpdateJob = useRadar((s) => s.setUpdateJob);
   const setUpdatePhase = useRadar((s) => s.setUpdatePhase);
 
+  // Device info loads on first expand.
   useEffect(() => {
     if (!expanded || info) return;
     api.deviceInfo(pin).then(setInfo).catch(() => undefined);
   }, [expanded, info, pin]);
 
-  // CONFIRM is collected via a prompt AFTER clicking the destructive button.
-  // Less to look at when admin is closed, harder to fat-finger from the wrong
-  // device.
-  async function runDestructive(label: string, fn: () => Promise<{ ok: boolean; error?: string }>): Promise<void> {
-    const code = window.prompt(`Type CONFIRM to ${label.toLowerCase()}:`);
-    if (code == null) return; // cancelled
-    if (code.trim().toUpperCase() !== "CONFIRM") { setMsg(`${label} cancelled — code didn't match.`); return; }
-    setBusy(true); setMsg(`${label}…`);
+  // Daily update-available check. We cache the result + timestamp in
+  // localStorage so opening Settings every few minutes doesn't hammer
+  // `git fetch`. Runs on first expand and once per day after.
+  useEffect(() => {
+    if (!expanded) return;
+    const KEY = "qdrn-update-check";
+    let parsed: { at: number; data: { behind: number; latestSha?: string; latestSubject?: string; latestAt?: string } } | null = null;
     try {
-      const r = await fn();
-      setMsg(r.ok ? `${label} ✓` : `${label} failed: ${r.error ?? "unknown"}`);
+      const raw = localStorage.getItem(KEY);
+      if (raw) parsed = JSON.parse(raw);
+    } catch { /* ignore */ }
+    if (parsed?.data) setCheck(parsed.data);
+    const fresh = parsed && Date.now() - parsed.at < 24 * 3600 * 1000;
+    if (fresh) return;
+    api.adminUpdateCheck(pin).then((r) => {
+      if (!r.ok) return;
+      const data = { behind: r.behind, latestSha: r.latestSha, latestSubject: r.latestSubject, latestAt: r.latestAt };
+      setCheck(data);
+      try { localStorage.setItem(KEY, JSON.stringify({ at: Date.now(), data })); } catch { /* ignore */ }
+    }).catch(() => undefined);
+  }, [expanded, pin]);
+
+  async function confirmAndRestart(): Promise<void> {
+    if (!window.confirm("Restart the radar container? Live tracking drops for ~10 seconds.")) return;
+    setBusy(true); setMsg("Restarting…");
+    try {
+      const r = await api.adminRestart(pin);
+      setMsg(r.ok ? "Restart ✓" : `Restart failed: ${r.error ?? "unknown"}`);
       if (r.ok) setInfo(null);
     } catch (e) {
-      setMsg(`${label} failed: ${(e as Error).message}`);
+      setMsg(`Restart failed: ${(e as Error).message}`);
     } finally { setBusy(false); }
   }
+
+  const updateAvailable = (check?.behind ?? 0) > 0;
 
   return (
     <div className="set-card" style={{ borderColor: "var(--danger)" }}>
@@ -839,8 +867,13 @@ function AdminSection({ pin }: { pin: string }): JSX.Element {
         aria-expanded={expanded}
       >
         <span style={{ flex: 1, textAlign: "left", fontWeight: 700, fontSize: 13, letterSpacing: 0.3, textTransform: "uppercase", color: "var(--danger)" }}>
-          🛠 Admin (owner)
+          🛠 Admin
         </span>
+        {updateAvailable && (
+          <span className="pill warn" style={{ marginRight: 8, fontSize: 11 }}>
+            Update available
+          </span>
+        )}
         <span className="set-collapse-chev" style={{ transform: expanded ? "rotate(90deg)" : "none" }}>›</span>
       </button>
       {expanded && (
@@ -859,27 +892,81 @@ function AdminSection({ pin }: { pin: string }): JSX.Element {
               </div>
             </div>
           )}
+          {updateAvailable && check && (
+            <div style={{ fontSize: 12, padding: "8px 10px", border: "1px solid var(--accent)", borderRadius: 8, background: "rgba(163, 201, 64, 0.08)" }}>
+              <div style={{ fontWeight: 700, marginBottom: 2 }}>
+                Update available · {check.behind} commit{check.behind === 1 ? "" : "s"} behind
+              </div>
+              {check.latestSubject && <div className="muted" style={{ fontSize: 11 }}>Latest: {check.latestSubject}</div>}
+            </div>
+          )}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button className="btn" style={{ flex: 1, minWidth: 140 }} disabled={busy}
-                    onClick={() => void runDestructive("Reset stats", () => api.adminResetStats(pin))}>
-              Reset stats
+            <button
+              className={`btn ${updateAvailable ? "btn-primary" : ""}`}
+              style={{ flex: 1, minWidth: 140 }}
+              disabled={busy}
+              onClick={() => void runUpdate({ pin, oldSha: info?.buildSha ?? null, setUpdateJob, setUpdatePhase, setMsg, setBusy, setInfo })}
+            >
+              Update Device
             </button>
-            <button className="btn" style={{ flex: 1, minWidth: 140 }} disabled={busy}
-                    onClick={() => void runUpdate({ pin, oldSha: info?.buildSha ?? null, setUpdateJob, setUpdatePhase, setMsg, setBusy, setInfo })}>
-              Pull update + restart
-            </button>
-            <button className="btn" style={{ flex: 1, minWidth: 140 }} disabled={busy}
-                    onClick={() => void runDestructive("Restart radar", () => api.adminRestart(pin))}>
-              Restart radar
+            <button className="btn" style={{ flex: 1, minWidth: 140 }} disabled={busy} onClick={() => void confirmAndRestart()}>
+              Restart Radar
             </button>
           </div>
+          <p className="muted" style={{ fontSize: 11, marginTop: 0 }}>
+            Update Device pulls the latest code and rebuilds the radar container. Restart Radar bounces just the container.
+          </p>
+          {msg && <div className="muted" style={{ fontSize: 12, whiteSpace: "pre-wrap" }}>{msg}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Master-PIN-only destructive ops. Same red styling, separate card so the
+ *  friend never sees a "Reset stats" button. */
+function SuperAdminSection({ pin }: { pin: string }): JSX.Element {
+  const [expanded, setExpanded] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  async function runDestructive(label: string, fn: () => Promise<{ ok: boolean; error?: string }>): Promise<void> {
+    const code = window.prompt(`Type CONFIRM to ${label.toLowerCase()}:`);
+    if (code == null) return;
+    if (code.trim().toUpperCase() !== "CONFIRM") { setMsg(`${label} cancelled — code didn't match.`); return; }
+    setBusy(true); setMsg(`${label}…`);
+    try {
+      const r = await fn();
+      setMsg(r.ok ? `${label} ✓` : `${label} failed: ${r.error ?? "unknown"}`);
+    } catch (e) {
+      setMsg(`${label} failed: ${(e as Error).message}`);
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <div className="set-card" style={{ borderColor: "var(--danger)" }}>
+      <button
+        className="set-collapse-head"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+      >
+        <span style={{ flex: 1, textAlign: "left", fontWeight: 700, fontSize: 13, letterSpacing: 0.3, textTransform: "uppercase", color: "var(--danger)" }}>
+          🛠 Super admin
+        </span>
+        <span className="set-collapse-chev" style={{ transform: expanded ? "rotate(90deg)" : "none" }}>›</span>
+      </button>
+      {expanded && (
+        <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 10 }}>
+          <button className="btn" disabled={busy}
+                  onClick={() => void runDestructive("Reset stats", () => api.adminResetStats(pin))}>
+            Reset stats
+          </button>
           <button className="btn" disabled={busy}
                   onClick={async () => {
                     setBusy(true); setMsg("Backfilling…");
                     try {
                       const r = await api.adminBackfillAchievements(pin);
                       setMsg(r.ok ? `Backfilled ${r.fired} unlocks from ${r.processed} sightings ✓` : `Backfill failed: ${r.error}`);
-                      if (r.ok) setInfo(null);
                     } finally { setBusy(false); }
                   }}>
             Backfill achievements from sightings
@@ -902,8 +989,7 @@ function AdminSection({ pin }: { pin: string }): JSX.Element {
             Diagnose achievement engine
           </button>
           <p className="muted" style={{ fontSize: 11, marginTop: 0 }}>
-            Reset stats wipes the sightings/flagged/coverage/achievements tables (settings + WiFi profiles are kept).
-            Pull update runs <code>git pull &amp;&amp; docker compose up -d --build qdrn-radar</code> on the host.
+            Reset stats wipes the sightings/flagged/coverage/achievements tables. Settings, WiFi profiles, and the enrichment cache are kept.
           </p>
           {msg && <div className="muted" style={{ fontSize: 12, whiteSpace: "pre-wrap" }}>{msg}</div>}
         </div>

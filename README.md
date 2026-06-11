@@ -73,7 +73,8 @@ npm run dev:web      # http://localhost:5173/md/
 
 QDRN palette is in `apps/web/src/theme.css` (CSS variables) and
 `apps/server/src/config.ts` (`getBrand`). Drop the official art into `brand/`:
-`logo.svg`, `captainq.svg`, `favicon.svg` — swappable without a rebuild.
+`QDRN Radar.png`, `QDRN Radar Long.png`, `CaptainQIcon-BGRVD.PNG` (favicon),
+`helicopter.png` (map icon) — swappable without a rebuild.
 
 > Dark Blue `#002D72` · Green `#A3C940` · White `#FFFFFF` · Black `#000000` · Light Gray `#F0F0F0`
 

@@ -379,15 +379,25 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
     return { ok: true, enabled: isAdsblolEnabled() };
   });
 
-  // ── Owner-only admin endpoints ─────────────────────────────────────────────
-  // Master PIN is required (the user PIN intentionally can't unlock these).
-  // adminPinOk runs the same constant-time check as pinOk but only accepts
-  // the master PIN, so even a shared user PIN can't trigger a wipe/update.
+  // ── Admin endpoints ────────────────────────────────────────────────────────
+  // The "device admin" subset (device-info, restart, update, update-check) is
+  // open to either the user PIN or the master PIN — the friend should be able
+  // to see uptime and rebuild their own device. The destructive ops
+  // (reset-stats, backfill, diagnose) stay master-only via adminPinOk.
   function adminPinOk(p: unknown): boolean { return isMasterPin(p); }
 
   app.post<{ Body: { pin?: string } }>("/admin/device-info", async (req, reply) => {
-    if (!adminPinOk(req.body?.pin)) return reply.code(401).send({ error: "owner_required" });
+    if (!pinOk(req.body?.pin)) return reply.code(401).send({ error: "bad_pin" });
     return await getDeviceInfo();
+  });
+
+  app.post<{ Body: { pin?: string } }>("/admin/update-check", async (req, reply) => {
+    if (!pinOk(req.body?.pin)) return reply.code(401).send({ error: "bad_pin" });
+    try {
+      return await netd<{ ok: boolean; behind: number; latestSha?: string; latestSubject?: string; latestAt?: string; error?: string }>({ op: "update-check" });
+    } catch (e) {
+      return { ok: false as const, behind: 0, error: (e as Error).message };
+    }
   });
 
   app.post<{ Body: { pin?: string } }>("/admin/reset-stats", async (req, reply) => {
@@ -416,7 +426,7 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post<{ Body: { pin?: string } }>("/admin/restart", async (req, reply) => {
-    if (!adminPinOk(req.body?.pin)) return reply.code(401).send({ error: "owner_required" });
+    if (!pinOk(req.body?.pin)) return reply.code(401).send({ error: "bad_pin" });
     // Restart can happen directly from the container — we have the docker
     // socket and the compose file mounted (see docker-compose.yml). Try
     // that first so this works even if qdrn-netd on the host is old or
@@ -435,7 +445,7 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post<{ Body: { pin?: string } }>("/admin/update", async (req, reply) => {
-    if (!adminPinOk(req.body?.pin)) return reply.code(401).send({ error: "owner_required" });
+    if (!pinOk(req.body?.pin)) return reply.code(401).send({ error: "bad_pin" });
     // Pull update needs `git pull` on the host, which the container can't
     // do directly — qdrn-netd is the only path. Translate the two most
     // common failure modes into exact instructions instead of cryptic

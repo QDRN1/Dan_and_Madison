@@ -249,6 +249,38 @@ def update_radar(_req: dict) -> dict:
     return {"ok": True, "sha": new_sha, "log": log_path}
 
 
+def check_update(_req: dict) -> dict:
+    """How far behind origin/main is the host checkout?
+
+    `git fetch` against the configured remote, then count commits between
+    HEAD and origin/main. If it's >0 the admin UI shows an "Update
+    available" badge. Latest commit subject lets us display "Pull update
+    fixes X, Y, Z" — nice carrot for the user to hit the button."""
+    repo = os.environ.get("QDRN_REPO", "/opt/qdrn")
+    if not os.path.isdir(repo):
+        return {"ok": False, "behind": 0, "error": f"QDRN_REPO not found: {repo}"}
+    git_safe = ["git", "-c", f"safe.directory={repo}", "-C", repo]
+    fetch = shell(git_safe + ["fetch", "--quiet", "origin", "main"], timeout=30)
+    if fetch.returncode != 0:
+        return {"ok": False, "behind": 0, "error": f"git fetch: {(fetch.stderr or fetch.stdout).strip()[:200]}"}
+    behind = shell(git_safe + ["rev-list", "--count", "HEAD..origin/main"], timeout=10)
+    n = 0
+    try:
+        n = int((behind.stdout or "0").strip())
+    except ValueError:
+        n = 0
+    latest_sha = shell(git_safe + ["rev-parse", "--short", "origin/main"], timeout=10).stdout.strip()
+    latest_subject = shell(git_safe + ["log", "-1", "--format=%s", "origin/main"], timeout=10).stdout.strip()
+    latest_at = shell(git_safe + ["log", "-1", "--format=%cI", "origin/main"], timeout=10).stdout.strip()
+    return {
+        "ok": True,
+        "behind": n,
+        "latestSha": latest_sha or None,
+        "latestSubject": latest_subject or None,
+        "latestAt": latest_at or None,
+    }
+
+
 def handle(req: dict) -> dict:
     op = req.get("op")
     if op == "list":
@@ -265,6 +297,8 @@ def handle(req: dict) -> dict:
         return restart_radar(req)
     if op == "update":
         return update_radar(req)
+    if op == "update-check":
+        return check_update(req)
     return {"ok": False, "error": f"unknown op: {op!r}"}
 
 

@@ -33,15 +33,15 @@ install -m 644 "$HERE/qdrn-watcher.service"    /etc/systemd/system/qdrn-watcher.
 install -d -m 755                              /etc/NetworkManager/dnsmasq-shared.d
 install -m 644 "$HERE/qdrn-portal-shared.conf" /etc/NetworkManager/dnsmasq-shared.d/qdrn-portal.conf
 
-# 4. Deploy brand assets the portal serves (real logo + SVG fallback + favicon).
+# 4. Deploy brand assets the portal serves (logo + Captain Q favicon).
 install -d -m 755 /usr/local/share/qdrn-portal/static
 if [[ -f "$REPO_ROOT/brand/QDRN Radar Long.png" ]]; then
   install -m 644 "$REPO_ROOT/brand/QDRN Radar Long.png"  /usr/local/share/qdrn-portal/static/logo.png
 elif [[ -f "$REPO_ROOT/brand/QDRN Radar.png" ]]; then
   install -m 644 "$REPO_ROOT/brand/QDRN Radar.png"       /usr/local/share/qdrn-portal/static/logo.png
 fi
-[[ -f "$REPO_ROOT/brand/logo.svg"    ]] && install -m 644 "$REPO_ROOT/brand/logo.svg"    /usr/local/share/qdrn-portal/static/logo.svg
-[[ -f "$REPO_ROOT/brand/favicon.svg" ]] && install -m 644 "$REPO_ROOT/brand/favicon.svg" /usr/local/share/qdrn-portal/static/favicon.svg
+[[ -f "$REPO_ROOT/brand/CaptainQIcon-BGRVD.PNG" ]] && \
+  install -m 644 "$REPO_ROOT/brand/CaptainQIcon-BGRVD.PNG" /usr/local/share/qdrn-portal/static/captain-q.png
 
 # 5. Make NetworkManager actually use dnsmasq for shared connections (it does
 #    by default, but a `dns=` override in NetworkManager.conf can disable it).

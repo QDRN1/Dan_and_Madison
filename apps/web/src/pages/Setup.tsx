@@ -46,7 +46,7 @@ export function Setup(): JSX.Element {
   }
 
   const logo = (
-    <img className="setup-logo" src={config?.brand.logoUrl ?? `${BASE}/brand/logo.svg`} alt="QDRN" onError={(e) => (e.currentTarget.style.display = "none")} />
+    <img className="setup-logo" src={config?.brand.logoUrl ?? `${BASE}/brand/QDRN%20Radar.png`} alt="QDRN" onError={(e) => (e.currentTarget.style.display = "none")} />
   );
 
   if (!unlocked) {
@@ -91,7 +91,7 @@ export function Setup(): JSX.Element {
     <div className="setup">
       <div className="page-toggle"><ThemeToggle className="glass" /></div>
       <div className="glass setup-card">
-        <img className="setup-logo" src={config?.brand.logoUrl ?? `${BASE}/brand/logo.svg`} alt="QDRN" onError={(e) => (e.currentTarget.style.display = "none")} />
+        <img className="setup-logo" src={config?.brand.logoUrl ?? `${BASE}/brand/QDRN%20Radar.png`} alt="QDRN" onError={(e) => (e.currentTarget.style.display = "none")} />
         <div className="steps-dots">
           {STEPS.map((_, i) => (
             <span key={i} className={`d${i === step ? " on" : i < step ? " done" : ""}`} />

@@ -27,7 +27,7 @@ PAGE = """<!doctype html>
 <title>QDRN Radar setup</title>
 <meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name=theme-color content="#001533">
-<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="icon" type="image/png" href="/static/captain-q.png">
 <style>
 :root {{
   --bg: #001533;
@@ -280,7 +280,7 @@ a:hover {{ text-decoration: underline; }}
 </head>
 <body>
 <div class="logo-wrap">
-  <img src="/static/logo.png" alt="QDRN Radar" onerror="this.src='/static/logo.svg'">
+  <img src="/static/logo.png" alt="QDRN Radar">
 </div>
 {body}
 </body>

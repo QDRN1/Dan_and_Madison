@@ -99,6 +99,10 @@ export const api = {
     a38xSightings: { typeCode: string; flight: string | null; operator: string | null }[];
   }>("/admin/diagnose-achievements", { pin }),
   adminRestart:    (pin: string) => post<{ ok: boolean; error?: string }>("/admin/restart", { pin }),
+  /** Daily-ish update check: qdrn-netd runs `git fetch` and reports how
+   *  many commits the host is behind origin/main, plus the latest commit
+   *  subject for a nice "Update available — fixes X" badge. */
+  adminUpdateCheck: (pin: string) => post<{ ok: boolean; behind: number; latestSha?: string; latestSubject?: string; latestAt?: string; error?: string }>("/admin/update-check", { pin }),
   /** Pull update is special: qdrn-netd kicks off `docker compose up
    *  --build` in a detached subprocess and returns immediately, so we
    *  normally get a 200. But the upstream container starts dying as
