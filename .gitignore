@@ -13,6 +13,8 @@ build/
 .env.local
 *.local
 secrets/
+# Pre-baked WiFi credentials (provisioning-only, never in the repo).
+provisioning/baked-wifi.local.conf
 
 # Runtime data
 data/

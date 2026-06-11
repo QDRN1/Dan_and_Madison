@@ -73,6 +73,14 @@ log "Installing qdrn-netd host helper"
 bash "$REPO_DIR/provisioning/qdrn-netd/install-netd.sh" || \
   echo "qdrn-netd install skipped — re-run later."
 
+# ── 5c. Pre-baked WiFi (owner networks like HobbitHouse, LAN-Down-Under) ──────
+# Reads provisioning/baked-wifi.local.conf (gitignored) and adds each network
+# to NetworkManager with autoconnect=yes + priority=90. No-op when the file is
+# absent (e.g. friend reinstalling for themselves).
+log "Adding pre-baked owner WiFi profiles (if any)"
+bash "$REPO_DIR/provisioning/install-baked-wifi.sh" || \
+  echo "baked-wifi install skipped — re-run later."
+
 # ── 6. App config ────────────────────────────────────────────────────────────
 if [[ ! -f .env ]]; then
   log "Creating .env from .env.example — EDIT IT before going live"

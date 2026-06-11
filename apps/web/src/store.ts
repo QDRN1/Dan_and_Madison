@@ -170,8 +170,15 @@ export const useRadar = create<RadarState>((set, get) => ({
 
   select: (selectedHex) => set({ selectedHex, selectedTrail: null }),
   setSelectedTrail: (selectedTrail) => set({ selectedTrail }),
-  setTheme: (theme) => set({ theme }),
-  toggleTheme: () => set((s) => ({ theme: s.theme === "light" ? "dark" : "light" })),
+  setTheme: (theme) => {
+    try { localStorage.setItem("qdrn-theme", theme); } catch { /* ignore */ }
+    set({ theme });
+  },
+  toggleTheme: () => set((s) => {
+    const next: Theme = s.theme === "light" ? "dark" : "light";
+    try { localStorage.setItem("qdrn-theme", next); } catch { /* ignore */ }
+    return { theme: next };
+  }),
   setIconTheme: (iconTheme) => {
     try { localStorage.setItem("qdrn-icon-theme", iconTheme); } catch { /* ignore */ }
     set({ iconTheme });

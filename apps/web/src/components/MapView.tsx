@@ -616,14 +616,20 @@ export function MapView(): JSX.Element {
     appliedThemeRef.current = theme;
     readyRef.current = false;
     map.setStyle(config.mapStyle[theme]);
-    const reinstall = () => {
+    const reinstall = (): void => {
       installLayers(map, theme, useRadar.getState().iconTheme);
       readyRef.current = true;
       updateSource();
       updateTrail();
       updateCoverage();
     };
-    map.once("idle", reinstall);
+    // `style.load` fires the moment setStyle finishes parsing the new
+    // basemap JSON — that's when our custom sources/layers need to go
+    // back in. We used to wait for `idle`, but idle waits for tiles +
+    // animations to settle, which can race (or never fire if the user
+    // pans during the swap), leaving the radar blank after a theme
+    // toggle. style.load is deterministic.
+    map.once("style.load", reinstall);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [theme, config]);
 

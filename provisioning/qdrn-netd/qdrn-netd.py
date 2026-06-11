@@ -30,12 +30,36 @@ def shell(cmd: list[str], timeout: int = CMD_TIMEOUT, env: dict | None = None) -
         return subprocess.CompletedProcess(cmd, 124, e.stdout or "", "timeout")
 
 
+def _baked_ssids() -> set:
+    """SSIDs from provisioning/baked-wifi.local.conf (the file is gitignored
+    and lives on the host alongside the repo). Read fresh on every list call
+    so the UI reflects deletions without us having to restart qdrn-netd.
+    Returns an empty set if the file isn't present (e.g. fresh install with
+    no baked networks)."""
+    repo = os.environ.get("QDRN_REPO", "/opt/qdrn")
+    path = os.path.join(repo, "provisioning", "baked-wifi.local.conf")
+    out: set = set()
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                ssid = line.split("\t", 1)[0].strip()
+                if ssid:
+                    out.add(ssid)
+    except OSError:
+        pass
+    return out
+
+
 def list_wifi() -> dict:
     r = shell([
         "nmcli", "-t",
         "-f", "NAME,UUID,TYPE,AUTOCONNECT,AUTOCONNECT-PRIORITY,DEVICE,STATE",
         "connection", "show",
     ])
+    baked = _baked_ssids()
     out = []
     for line in r.stdout.split("\n"):
         if not line.strip():
@@ -56,6 +80,11 @@ def list_wifi() -> dict:
             "autoconnect": ac == "yes",
             "priority": prio_i,
             "active": bool(device) and state == "activated",
+            # Owner-baked profile (HobbitHouse, LAN-Down-Under, …). The
+            # Settings UI hides these from the saved list unless the SSID
+            # also shows up in the latest scan — so the friend doesn't see
+            # networks they have no business seeing.
+            "baked": name in baked,
         })
     return {"ok": True, "networks": out}
 

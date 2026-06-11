@@ -1197,13 +1197,21 @@ function WifiSection({ pin }: { pin: string }): JSX.Element {
 
       {err && <div style={{ color: "var(--danger)", fontSize: 12, marginBottom: 8 }}>{err}</div>}
 
-      {nets && nets.length === 0 && !err && (
-        <div className="muted" style={{ fontSize: 13, marginBottom: 10 }}>No saved networks yet.</div>
-      )}
-
-      {nets && nets.length > 0 && (
+      {(() => {
+        // Hide owner-baked networks (HobbitHouse, LAN-Down-Under, …) unless
+        // the SSID also shows up in the current scan, so the friend sees a
+        // baked profile only when they're actually in range of it (and can
+        // forget it if they want). Active networks are always shown.
+        const visibleSsids = new Set<string>((scan ?? []).map((s) => s.ssid));
+        const visibleNets = (nets ?? []).filter(
+          (n) => n.active || !n.baked || visibleSsids.has(n.name),
+        );
+        if (visibleNets.length === 0 && !err) {
+          return <div className="muted" style={{ fontSize: 13, marginBottom: 10 }}>No saved networks yet.</div>;
+        }
+        return (
         <div className="wifi-list" style={{ marginBottom: 10 }}>
-          {nets.map((n) => (
+          {visibleNets.map((n) => (
             <div key={n.uuid || n.name} className={`wifi-row${n.active ? " active" : ""}`}>
               <span className="dot wifi-dot" style={{ background: n.active ? "var(--accent)" : "var(--muted)" }} />
               <div className="wifi-info">
@@ -1228,7 +1236,8 @@ function WifiSection({ pin }: { pin: string }): JSX.Element {
             </div>
           ))}
         </div>
-      )}
+        );
+      })()}
 
       {/* Scan section */}
       <button className="btn btn-block" disabled={scanning} onClick={() => void doScan()} style={{ marginBottom: 8 }}>

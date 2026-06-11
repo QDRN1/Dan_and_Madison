@@ -375,6 +375,11 @@ export interface WifiNetwork {
   priority: number;
   /** True iff this profile is the one currently activated on wlan0. */
   active: boolean;
+  /** Owner-baked profile (listed in provisioning/baked-wifi.local.conf).
+   *  Hidden from the Settings list unless the SSID also shows up in a
+   *  current scan — keeps networks the friend has no business knowing
+   *  about off-screen, while still letting them forget one in range. */
+  baked?: boolean;
 }
 
 /** A nearby broadcasting WiFi network from a fresh scan. */
