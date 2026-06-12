@@ -49,9 +49,13 @@ interface State {
    *  re-trigger HTTP every refresh. enrich() also caches internally; this
    *  just spares the repeat lookup overhead. */
   enrichedFor: Map<string, string>;
+  /** Last failure reason from refresh() — shown by the debug endpoint so
+   *  the user can tell whether the API is unreachable, returning 0 planes,
+   *  or returning data we then drop on the floor. */
+  lastError: string | null;
 }
 
-const state: State = { lastFetchAt: 0, byHex: new Map(), inflight: null, enrichedFor: new Map() };
+const state: State = { lastFetchAt: 0, byHex: new Map(), inflight: null, enrichedFor: new Map(), lastError: null };
 
 /** Synchronously return the cached off-radar planes, refreshing in the
  *  background if the cache is stale. The poller calls this every snapshot
@@ -88,15 +92,41 @@ export function getOffRadarAircraft(hex: string): Aircraft | undefined {
   return state.byHex.get(hex.toLowerCase())?.ac;
 }
 
+/** Debug snapshot — what does the off-radar subsystem actually think? Used
+ *  by the admin off-radar status endpoint so the user can stop guessing
+ *  why no fill-in planes are appearing. */
+export function getOffRadarDebug(): {
+  enabled: boolean;
+  cacheSize: number;
+  lastFetchAt: number | null;
+  lastFetchAgoSec: number | null;
+  lastError: string | null;
+  inflight: boolean;
+} {
+  return {
+    enabled: isOffRadarEnabled(),
+    cacheSize: state.byHex.size,
+    lastFetchAt: state.lastFetchAt || null,
+    lastFetchAgoSec: state.lastFetchAt ? Math.round((Date.now() - state.lastFetchAt) / 1000) : null,
+    lastError: state.lastError,
+    inflight: state.inflight != null,
+  };
+}
+
 async function refresh(lat: number, lon: number, radiusNm: number): Promise<void> {
   state.lastFetchAt = Date.now();
   try {
     const r = radiusNm > 250 ? 250 : Math.max(1, Math.round(radiusNm));
     const url = `${BASE}/point/${lat}/${lon}/${r}`;
     const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-    if (!res.ok) return;
+    if (!res.ok) {
+      state.lastError = `HTTP ${res.status} from ${BASE}`;
+      return;
+    }
     const body = (await res.json()) as { ac?: RawAdsblolAircraft[] };
     const raw = body.ac ?? [];
+    if (raw.length === 0) state.lastError = `${BASE} returned 0 aircraft near ${lat},${lon} r=${r}nm`;
+    else state.lastError = null;
     const now = Date.now();
     for (const r of raw) {
       if (!r.hex || typeof r.lat !== "number" || typeof r.lon !== "number") continue;
@@ -135,7 +165,7 @@ async function refresh(lat: number, lon: number, radiusNm: number): Promise<void
         });
       }
     }
-  } catch {
-    /* swallow — best-effort feed */
+  } catch (e) {
+    state.lastError = `fetch threw: ${(e as Error).message}`;
   }
 }

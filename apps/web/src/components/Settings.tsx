@@ -523,6 +523,26 @@ function OffRadarSection({
 }: { pin: string; enabled: boolean; onChanged: () => void }): JSX.Element {
   const [expanded, setExpanded] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<{ cacheSize: number; lastFetchAgoSec: number | null; lastError: string | null; inflight: boolean } | null>(null);
+
+  // While the card is open and off-radar is on, poll the status every 5s so
+  // the user can SEE whether the feed is producing planes — "0 in cache" with
+  // a recent fetch is a different problem than "no fetch ever". Drops the
+  // need to SSH and run curl just to debug.
+  useEffect(() => {
+    if (!expanded || !enabled) { setStatus(null); return; }
+    let alive = true;
+    const tick = async (): Promise<void> => {
+      try {
+        const s = await api.offRadarStatus(pin);
+        if (alive) setStatus(s);
+      } catch { /* ignore — likely transient */ }
+    };
+    void tick();
+    const t = setInterval(() => void tick(), 5000);
+    return () => { alive = false; clearInterval(t); };
+  }, [expanded, enabled, pin]);
+
   return (
     <div className="set-card">
       <button
@@ -542,8 +562,7 @@ function OffRadarSection({
             Pulls planes within ~1.2× your widest range ring from the adsb.lol
             global feed so terrain shadows / horizon drop-outs aren't dead
             zones. Off-radar planes render dimmed and tagged 📡 in the list.
-            Local readings always win. Refreshes every 20s; respects the
-            master adsb.lol toggle.
+            Local readings always win. Refreshes every 20s.
           </p>
           <button
             className="btn btn-block"
@@ -556,6 +575,25 @@ function OffRadarSection({
           >
             {busy ? "Saving…" : enabled ? "Disable off-radar fill" : "Enable off-radar fill"}
           </button>
+          {enabled && status && (
+            <div style={{ marginTop: 8, fontSize: 11, padding: "6px 8px", border: "1px solid var(--border)", borderRadius: 6, lineHeight: 1.5 }}>
+              <div>
+                <b>Cache:</b> {status.cacheSize} plane{status.cacheSize === 1 ? "" : "s"}
+                {status.lastFetchAgoSec != null && <span className="muted"> · last fetch {status.lastFetchAgoSec}s ago</span>}
+                {status.inflight && <span className="muted"> · fetching…</span>}
+              </div>
+              {status.lastError && (
+                <div style={{ color: "var(--danger)", marginTop: 4, wordBreak: "break-word" }}>
+                  {status.lastError}
+                </div>
+              )}
+              {!status.lastError && status.cacheSize === 0 && status.lastFetchAgoSec != null && status.lastFetchAgoSec < 60 && (
+                <div className="muted" style={{ marginTop: 4 }}>
+                  Feed responded with no planes — usually means none are above the horizon outside your reception right now.
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

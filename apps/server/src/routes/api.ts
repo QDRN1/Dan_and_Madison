@@ -60,7 +60,7 @@ import { adminResetDevice, adminResetStats, getDeviceInfo } from "../admin.js";
 import { backfillAchievements, diagnoseAchievements } from "../achievements.js";
 import { deriveFreeRouteTimes, withRouteSanity } from "../derived-times.js";
 import { fetchExtendedTrack } from "../extended-track.js";
-import { getOffRadarAircraft } from "../off-radar.js";
+import { getOffRadarAircraft, getOffRadarDebug } from "../off-radar.js";
 import { addWatch, clearWatchFire, listWatches, removeWatch } from "../watches.js";
 import { applyFeedersInBackground, writeFeederEnv } from "../feeder.js";
 import { store } from "../poller.js";
@@ -299,6 +299,15 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
       autoUpdateEnabled: isAutoUpdateEnabled(),
     };
     return settings;
+  });
+
+  /** Off-radar diagnostic — surfaces the live state of the adsb.lol
+   *  fill-in subsystem so the user can stop guessing why no dimmed
+   *  planes are appearing. Reports enabled flag, cache size, last
+   *  fetch timestamp, and the most recent failure reason. */
+  app.post<{ Body: { pin?: string } }>("/admin/off-radar-status", async (req, reply) => {
+    if (!pinOk(req.body?.pin)) return reply.code(401).send({ error: "bad_pin" });
+    return getOffRadarDebug();
   });
 
   app.post<{ Body: { pin?: string; enabled?: boolean } }>("/admin/auto-update", async (req, reply) => {

@@ -80,6 +80,8 @@ export const api = {
     post<{ ok: boolean; enabled: boolean }>("/setup/adsblol", { pin, enabled }),
   saveOffRadar: (pin: string, enabled: boolean) =>
     post<{ ok: boolean; enabled: boolean }>("/setup/off-radar", { pin, enabled }),
+  offRadarStatus: (pin: string) =>
+    post<{ enabled: boolean; cacheSize: number; lastFetchAt: number | null; lastFetchAgoSec: number | null; lastError: string | null; inflight: boolean }>("/admin/off-radar-status", { pin }),
   saveAutoUpdate: (pin: string, enabled: boolean) =>
     post<{ ok: boolean; enabled: boolean }>("/admin/auto-update", { pin, enabled }),
   /** Owner-only admin endpoints (master PIN required server-side). */
@@ -134,8 +136,29 @@ export const api = {
       throw e;
     }
   },
-  wifiList: (pin: string) =>
-    post<{ ok: boolean; networks?: WifiNetwork[]; error?: string }>("/setup/wifi", { pin }),
+  wifiList: async (pin: string) => {
+    // The /setup/wifi endpoint returns 503 when qdrn-netd is unreachable
+    // (socket missing, service stopped, version mismatch). Translate that
+    // into a friendly "host helper isn't responding" message instead of
+    // the raw "/setup/wifi -> 503" the generic POST helper would surface.
+    try {
+      const res = await fetch(`${API}/setup/wifi`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ pin }),
+      });
+      if (res.status === 503) {
+        return {
+          ok: false as const,
+          error: "Host helper (qdrn-netd) isn't responding. SSH into the radar and run:\n  sudo systemctl restart qdrn-netd\n\nIf that doesn't help:\n  sudo bash ~/Dan_and_Madison/provisioning/qdrn-netd/install-netd.sh",
+        };
+      }
+      if (!res.ok) throw new Error(`/setup/wifi -> ${res.status}`);
+      return (await res.json()) as { ok: boolean; networks?: WifiNetwork[]; error?: string };
+    } catch (e) {
+      return { ok: false as const, error: (e as Error).message };
+    }
+  },
   wifiAdd: (pin: string, ssid: string, password: string, priority: number) =>
     post<{ ok: boolean; error?: string }>("/setup/wifi/add", { pin, ssid, password, priority }),
   wifiRemove: (pin: string, target: { name?: string; uuid?: string }) =>
