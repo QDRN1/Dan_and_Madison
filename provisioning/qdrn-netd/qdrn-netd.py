@@ -265,8 +265,10 @@ def check_update(_req: dict) -> dict:
 
     `git fetch` against the configured remote, then count commits between
     HEAD and origin/main. If it's >0 the admin UI shows an "Update
-    available" badge. Latest commit subject lets us display "Pull update
-    fixes X, Y, Z" — nice carrot for the user to hit the button."""
+    available" badge. `subjects` carries the full changelog (one commit
+    subject per pending commit, newest first, capped at 20) so the
+    confirm dialog can show exactly what the update fixes — users trust
+    updates that say what they change."""
     repo = os.environ.get("QDRN_REPO", "/opt/qdrn")
     if not os.path.isdir(repo):
         return {"ok": False, "behind": 0, "error": f"QDRN_REPO not found: {repo}"}
@@ -283,12 +285,15 @@ def check_update(_req: dict) -> dict:
     latest_sha = shell(git_safe + ["rev-parse", "--short", "origin/main"], timeout=10).stdout.strip()
     latest_subject = shell(git_safe + ["log", "-1", "--format=%s", "origin/main"], timeout=10).stdout.strip()
     latest_at = shell(git_safe + ["log", "-1", "--format=%cI", "origin/main"], timeout=10).stdout.strip()
+    subjects_raw = shell(git_safe + ["log", "--format=%s", "HEAD..origin/main"], timeout=10)
+    subjects = [s.strip() for s in subjects_raw.stdout.split("\n") if s.strip()][:20]
     return {
         "ok": True,
         "behind": n,
         "latestSha": latest_sha or None,
         "latestSubject": latest_subject or None,
         "latestAt": latest_at or None,
+        "subjects": subjects,
     }
 
 

@@ -830,7 +830,7 @@ function DeviceAdminSection({ pin }: { pin: string }): JSX.Element {
   const [info, setInfo] = useState<DeviceInfo | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
-  const [check, setCheck] = useState<{ behind: number; latestSha?: string; latestSubject?: string; latestAt?: string } | null>(null);
+  const [check, setCheck] = useState<{ behind: number; latestSha?: string; latestSubject?: string; latestAt?: string; subjects?: string[] } | null>(null);
   const setUpdateJob = useRadar((s) => s.setUpdateJob);
   const setUpdatePhase = useRadar((s) => s.setUpdatePhase);
 
@@ -846,7 +846,7 @@ function DeviceAdminSection({ pin }: { pin: string }): JSX.Element {
   useEffect(() => {
     if (!expanded) return;
     const KEY = "qdrn-update-check";
-    let parsed: { at: number; data: { behind: number; latestSha?: string; latestSubject?: string; latestAt?: string } } | null = null;
+    let parsed: { at: number; data: { behind: number; latestSha?: string; latestSubject?: string; latestAt?: string; subjects?: string[] } } | null = null;
     try {
       const raw = localStorage.getItem(KEY);
       if (raw) parsed = JSON.parse(raw);
@@ -856,7 +856,7 @@ function DeviceAdminSection({ pin }: { pin: string }): JSX.Element {
     if (fresh) return;
     api.adminUpdateCheck(pin).then((r) => {
       if (!r.ok) return;
-      const data = { behind: r.behind, latestSha: r.latestSha, latestSubject: r.latestSubject, latestAt: r.latestAt };
+      const data = { behind: r.behind, latestSha: r.latestSha, latestSubject: r.latestSubject, latestAt: r.latestAt, subjects: r.subjects };
       setCheck(data);
       try { localStorage.setItem(KEY, JSON.stringify({ at: Date.now(), data })); } catch { /* ignore */ }
     }).catch(() => undefined);
@@ -897,7 +897,7 @@ function DeviceAdminSection({ pin }: { pin: string }): JSX.Element {
     }
 
     if (r && r.ok) {
-      const data = { behind: r.behind, latestSha: r.latestSha, latestSubject: r.latestSubject, latestAt: r.latestAt };
+      const data = { behind: r.behind, latestSha: r.latestSha, latestSubject: r.latestSubject, latestAt: r.latestAt, subjects: r.subjects };
       setCheck(data);
       try { localStorage.setItem("qdrn-update-check", JSON.stringify({ at: Date.now(), data })); } catch { /* ignore */ }
       if (r.behind === 0) {
@@ -906,9 +906,17 @@ function DeviceAdminSection({ pin }: { pin: string }): JSX.Element {
         setBusy(false);
         return;
       }
-      const subject = r.latestSubject ? `\n\nLatest change:\n  ${r.latestSubject}` : "";
+      // Full changelog (newest first) — users trust an update that says
+      // what it changes. Capped at 8 lines so the confirm stays readable;
+      // older qdrn-netd without `subjects` falls back to the single
+      // latest subject.
+      const lines = (r.subjects && r.subjects.length > 0 ? r.subjects : r.latestSubject ? [r.latestSubject] : [])
+        .slice(0, 8)
+        .map((s) => `  • ${s}`);
+      const more = r.behind > lines.length ? `\n  …and ${r.behind - lines.length} more` : "";
+      const changelog = lines.length > 0 ? `\n\nWhat's new:\n${lines.join("\n")}${more}` : "";
       const proceed = window.confirm(
-        `${r.behind} update${r.behind === 1 ? "" : "s"} available.${subject}\n\n` +
+        `${r.behind} update${r.behind === 1 ? "" : "s"} available.${changelog}\n\n` +
         "Do you want to proceed? The radar will be unavailable for ~30–60 seconds " +
         "while the new image builds, then the page will auto-reload.",
       );
@@ -967,10 +975,17 @@ function DeviceAdminSection({ pin }: { pin: string }): JSX.Element {
           )}
           {updateAvailable && check && (
             <div style={{ fontSize: 12, padding: "8px 10px", border: "1px solid var(--accent)", borderRadius: 8, background: "rgba(163, 201, 64, 0.08)" }}>
-              <div style={{ fontWeight: 700, marginBottom: 2 }}>
-                Update available · {check.behind} commit{check.behind === 1 ? "" : "s"} behind
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>
+                Update available · {check.behind} change{check.behind === 1 ? "" : "s"}
               </div>
-              {check.latestSubject && <div className="muted" style={{ fontSize: 11 }}>Latest: {check.latestSubject}</div>}
+              {(check.subjects && check.subjects.length > 0 ? check.subjects : check.latestSubject ? [check.latestSubject] : [])
+                .slice(0, 6)
+                .map((s, i) => (
+                  <div key={i} className="muted" style={{ fontSize: 11, lineHeight: 1.5 }}>• {s}</div>
+                ))}
+              {check.behind > 6 && (
+                <div className="muted" style={{ fontSize: 11, lineHeight: 1.5 }}>…and {check.behind - 6} more</div>
+              )}
             </div>
           )}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>

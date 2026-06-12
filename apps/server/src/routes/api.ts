@@ -378,7 +378,7 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: { pin?: string } }>("/admin/update-check", async (req, reply) => {
     if (!pinOk(req.body?.pin)) return reply.code(401).send({ error: "bad_pin" });
     try {
-      return await netd<{ ok: boolean; behind: number; latestSha?: string; latestSubject?: string; latestAt?: string; error?: string }>({ op: "update-check" });
+      return await netd<{ ok: boolean; behind: number; latestSha?: string; latestSubject?: string; latestAt?: string; subjects?: string[]; error?: string }>({ op: "update-check" });
     } catch (e) {
       return { ok: false as const, behind: 0, error: (e as Error).message };
     }
