@@ -9,6 +9,7 @@ import { store } from "./poller.js";
 import { setupWebsocket } from "./ws.js";
 import apiRoutes from "./routes/api.js";
 import adminRoutes from "./routes/admin.js";
+import { startAutoUpdate } from "./auto-update.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const WEB_DIST = process.env.WEB_DIST ?? resolve(__dirname, "../../web/dist");
@@ -52,6 +53,7 @@ async function main(): Promise<void> {
   app.get(`${BASE_PATH}/healthz`, async () => ({ ok: true }));
 
   store.start();
+  startAutoUpdate(app.log);
 
   await app.listen({ port: PORT, host: "0.0.0.0" });
   app.log.info(`QDRN Radar listening on :${PORT} at ${BASE_PATH}`);

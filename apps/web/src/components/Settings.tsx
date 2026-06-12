@@ -196,6 +196,23 @@ export function Settings(): JSX.Element {
 
       {/* 9. Change PIN */}
       <PinSection currentPin={pin} onChanged={(p) => { sessionStorage.setItem(PIN_KEY, p); setPin(p); }} />
+
+      {/* 10. Logout — clears the sessionStorage PIN so the next visit (or
+       *      anyone else on this device) has to re-enter the PIN. */}
+      <button
+        className="btn btn-block"
+        style={{ marginTop: 4, background: "transparent", borderStyle: "dashed" }}
+        onClick={() => {
+          sessionStorage.removeItem(PIN_KEY);
+          setUnlocked(false);
+          setIsMaster(false);
+          setS(null);
+          setPin("");
+          setEntry("");
+        }}
+      >
+        Lock settings
+      </button>
     </div>
   );
 }
@@ -969,12 +986,49 @@ function DeviceAdminSection({ pin }: { pin: string }): JSX.Element {
               Restart Radar
             </button>
           </div>
+          <AutoUpdateToggle pin={pin} />
           <p className="muted" style={{ fontSize: 11, marginTop: 0 }}>
             Update Device pulls the latest code and rebuilds the radar container. Restart Radar bounces just the container.
           </p>
           {msg && <div className="muted" style={{ fontSize: 12, whiteSpace: "pre-wrap" }}>{msg}</div>}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Background-update opt-in. When ON the server polls daily and, if any
+ *  commits are waiting on origin/main, pulls + rebuilds during the off-peak
+ *  window (3-5 AM device-local time). Default OFF. */
+function AutoUpdateToggle({ pin }: { pin: string }): JSX.Element {
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    api.settings(pin).then((s) => setEnabled(s.autoUpdateEnabled)).catch(() => setEnabled(false));
+  }, [pin]);
+  if (enabled == null) return <></>;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", border: "1px solid var(--border)", borderRadius: 8 }}>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontWeight: 700, fontSize: 13 }}>Auto-update</div>
+        <div className="muted" style={{ fontSize: 11 }}>
+          Check daily and apply between 3–5 AM if updates are available.
+        </div>
+      </div>
+      <button
+        className={`btn ${enabled ? "btn-primary" : ""}`}
+        style={{ padding: "6px 14px" }}
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          try {
+            const r = await api.saveAutoUpdate(pin, !enabled);
+            if (r.ok) setEnabled(r.enabled);
+          } finally { setBusy(false); }
+        }}
+      >
+        {enabled ? "On" : "Off"}
+      </button>
     </div>
   );
 }
@@ -1016,6 +1070,24 @@ function SuperAdminSection({ pin }: { pin: string }): JSX.Element {
           <button className="btn" disabled={busy}
                   onClick={() => void runDestructive("Reset stats", () => api.adminResetStats(pin))}>
             Reset stats
+          </button>
+          <button className="btn" disabled={busy} style={{ borderColor: "var(--danger)", color: "var(--danger)" }}
+                  onClick={async () => {
+                    // Reset device is "factory reset minus the parts that get you back in":
+                    // wipes the SQLite DB entirely (sightings, settings, PIN, watches, etc.)
+                    // but leaves .env (CF_TUNNEL_TOKEN), ~/.cloudflared/, Pi Connect, and
+                    // baked WiFi profiles untouched. Friend lands on the CaptainQ wizard
+                    // on next page load.
+                    await runDestructive("Reset device", async () => {
+                      const r = await api.adminResetDevice(pin);
+                      if (!r.ok) return r;
+                      // Restart the container so it boots with the fresh DB. (better-sqlite3
+                      // has the DB open; restart lets it re-init clean.)
+                      try { await api.adminRestart(pin); } catch { /* container will recycle anyway */ }
+                      return r;
+                    });
+                  }}>
+            Reset device (preserves CF tunnel + WiFi)
           </button>
           <button className="btn" disabled={busy}
                   onClick={async () => {

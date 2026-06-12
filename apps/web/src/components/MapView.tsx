@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import maplibregl, { type GeoJSONSource, type Map as MlMap } from "maplibre-gl";
 import type { FeatureCollection } from "geojson";
 import type { CoveragePoint } from "@qdrn/shared";
@@ -142,6 +142,11 @@ export function MapView(): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
   const readyRef = useRef(false);
+  // Reactive companion to readyRef — useEffects that need to fire AFTER the
+  // map style is ready (storm overlay, etc.) depend on this. readyRef is a
+  // mutable ref so synchronous functions like updateSource can guard on it
+  // without re-rendering; mapReady is the state version for hooks.
+  const [mapReady, setMapReady] = useState(false);
   const handlersRef = useRef(false);
   const appliedThemeRef = useRef<Theme | null>(null);
   const coverageRef = useRef<CoveragePoint[]>([]);
@@ -582,6 +587,7 @@ export function MapView(): JSX.Element {
       installLayers(map, st.theme, st.iconTheme);
       attachHandlers(map);
       readyRef.current = true;
+      setMapReady(true);
       updateSource();
       updateTrail();
       updateCoverage();
@@ -615,10 +621,12 @@ export function MapView(): JSX.Element {
     if (appliedThemeRef.current === theme) return;
     appliedThemeRef.current = theme;
     readyRef.current = false;
+    setMapReady(false);
     map.setStyle(config.mapStyle[theme]);
     const reinstall = (): void => {
       installLayers(map, theme, useRadar.getState().iconTheme);
       readyRef.current = true;
+      setMapReady(true);
       updateSource();
       updateTrail();
       updateCoverage();
@@ -652,7 +660,12 @@ export function MapView(): JSX.Element {
   // doesn't even request the bad tiles.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !readyRef.current) return;
+    // Gate on the reactive mapReady — readyRef is a ref so toggling storm
+    // before the map is ready used to silently no-op (which is why you had
+    // to toggle off then on again to make it appear). Depending on
+    // mapReady means the effect re-fires the moment the map is ready, and
+    // also after every theme switch (style.load → setMapReady(true)).
+    if (!map || !mapReady) return;
 
     const removeLayer = () => {
       if (map.getLayer("storm")) map.removeLayer("storm");
@@ -697,8 +710,7 @@ export function MapView(): JSX.Element {
     void apply();
     const t = setInterval(() => void apply(), 10 * 60 * 1000);
     return () => { alive = false; clearInterval(t); removeLayer(); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stormOverlay, theme]);
+  }, [stormOverlay, theme, mapReady]);
 
   // Push live aircraft / selection to the map.
   useEffect(() => {

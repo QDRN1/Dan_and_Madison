@@ -89,6 +89,8 @@ const SETTING_KEYS = {
   homeWifiName: "homeWifi.name",
   adsblolEnabled: "adsb.lol.enabled",
   offRadarEnabled: "offRadar.enabled",
+  autoUpdateEnabled: "autoUpdate.enabled",
+  autoUpdateLastRunAt: "autoUpdate.lastRunAt",
 } as const;
 
 export function getReceiver(): ReceiverInfo {
@@ -308,4 +310,29 @@ export function isOffRadarEnabled(): boolean {
 
 export function setOffRadarEnabled(enabled: boolean): void {
   setSetting(SETTING_KEYS.offRadarEnabled, String(enabled));
+}
+
+/** Background auto-updater. When ON, the server checks daily for new commits
+ *  on origin/main and, if any are present, pulls + rebuilds the radar
+ *  container during the off-peak window (3–5 AM device-local time, per the
+ *  TZ env). Default OFF — the friend gets a notification ("Update available")
+ *  and applies it manually unless they opt in. */
+export function isAutoUpdateEnabled(): boolean {
+  const raw = getSetting(SETTING_KEYS.autoUpdateEnabled);
+  if (raw == null) return env("AUTO_UPDATE_ENABLED", "false") === "true";
+  return raw === "true";
+}
+
+export function setAutoUpdateEnabled(enabled: boolean): void {
+  setSetting(SETTING_KEYS.autoUpdateEnabled, String(enabled));
+}
+
+export function getAutoUpdateLastRunAt(): number | null {
+  const raw = getSetting(SETTING_KEYS.autoUpdateLastRunAt);
+  const n = raw ? Number(raw) : NaN;
+  return Number.isFinite(n) ? n : null;
+}
+
+export function setAutoUpdateLastRunAt(at: number): void {
+  setSetting(SETTING_KEYS.autoUpdateLastRunAt, String(at));
 }

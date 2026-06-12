@@ -446,6 +446,8 @@ export interface AdminSettings {
   adsblolEnabled: boolean;
   /** Whether the off-radar fill-in (adsb.lol nearby feed) is on. */
   offRadarEnabled: boolean;
+  /** Background auto-updater: check daily, apply during 3–5 AM local time. */
+  autoUpdateEnabled: boolean;
 }
 
 export interface BrandConfig {

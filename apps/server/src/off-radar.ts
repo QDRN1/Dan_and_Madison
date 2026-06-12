@@ -1,5 +1,5 @@
 import type { Aircraft } from "@qdrn/shared";
-import { isAdsblolEnabled } from "./config.js";
+import { isOffRadarEnabled } from "./config.js";
 import { enrich } from "./enrichment.js";
 
 /**
@@ -15,8 +15,11 @@ import { enrich } from "./enrichment.js";
  * in the detail card and the airline logo / Frontier animal / popout
  * filters work end-to-end.
  *
- * Disabled when adsb.lol is off (Settings → adsb.lol routes) so a single
- * toggle controls both routes + fill-in.
+ * Gated on the standalone "Off-radar fill" toggle (Settings) — independent
+ * from the adsb.lol routes toggle. Used to be coupled to isAdsblolEnabled,
+ * but that meant disabling adsb.lol routes silently killed off-radar fill
+ * even when the user had explicitly enabled it; the friend never saw any
+ * dimmed fill-in planes.
  */
 
 const REFRESH_MS = 20_000;
@@ -56,8 +59,11 @@ const state: State = { lastFetchAt: 0, byHex: new Map(), inflight: null, enriche
 export function getOffRadarSnapshot(opts: {
   lat: number; lon: number; radiusNm: number;
 }): Aircraft[] {
-  if (!isAdsblolEnabled()) {
+  if (!isOffRadarEnabled()) {
     if (state.byHex.size > 0) { state.byHex.clear(); state.enrichedFor.clear(); }
+    // Zero out the timestamp so re-enabling triggers an immediate refresh
+    // instead of waiting up to REFRESH_MS for the next 20s tick.
+    state.lastFetchAt = 0;
     return [];
   }
   const now = Date.now();

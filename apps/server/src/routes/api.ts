@@ -1,33 +1,7 @@
-import { createConnection } from "node:net";
 import { execFile } from "node:child_process";
 import type { FastifyInstance } from "fastify";
 import type { AdminSettings, PublicConfig, SetupState, WifiNetwork, WifiScanResult } from "@qdrn/shared";
-
-const NETD_SOCK = process.env.QDRN_NETD_SOCK ?? "/run/qdrn-net.sock";
-
-/** One-shot JSON RPC to the host helper (qdrn-netd). */
-function netd<T = unknown>(req: Record<string, unknown>): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const sock = createConnection(NETD_SOCK);
-    let buf = "";
-    let done = false;
-    const finish = (val: unknown, err?: Error) => {
-      if (done) return;
-      done = true;
-      try { sock.destroy(); } catch { /* ignore */ }
-      if (err) reject(err);
-      else resolve(val as T);
-    };
-    sock.on("data", (d) => { buf += d.toString(); });
-    sock.on("end", () => {
-      try { finish(JSON.parse(buf.trim() || "{}")); }
-      catch (e) { finish(null, e as Error); }
-    });
-    sock.on("error", (e) => finish(null, e));
-    sock.write(JSON.stringify(req) + "\n");
-    setTimeout(() => finish(null, new Error("netd timeout")), 30_000);
-  });
-}
+import { netd } from "../netd.js";
 
 /** Run `docker compose ...` against the mounted host docker.sock from inside
  *  the container. The Dockerfile installs docker CLI + compose plugin for
@@ -64,10 +38,12 @@ import {
   getReceiver,
   getSetupPin,
   isAdsblolEnabled,
+  isAutoUpdateEnabled,
   isOffRadarEnabled,
   isPinSet,
   noteHomeWifi,
   setAdsblolEnabled,
+  setAutoUpdateEnabled,
   setOffRadarEnabled,
   setAeroApiConfig,
   setApiKey,
@@ -80,7 +56,7 @@ import { listAchievements } from "../achievements.js";
 import { getConnections } from "../connections.js";
 import { getCoverage } from "../coverage.js";
 import { clearEnrichmentCache, enrich } from "../enrichment.js";
-import { adminResetStats, getDeviceInfo } from "../admin.js";
+import { adminResetDevice, adminResetStats, getDeviceInfo } from "../admin.js";
 import { backfillAchievements, diagnoseAchievements } from "../achievements.js";
 import { deriveFreeRouteTimes, withRouteSanity } from "../derived-times.js";
 import { fetchExtendedTrack } from "../extended-track.js";
@@ -320,8 +296,16 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
       gateway: getGatewayConfig(),
       adsblolEnabled: isAdsblolEnabled(),
       offRadarEnabled: isOffRadarEnabled(),
+      autoUpdateEnabled: isAutoUpdateEnabled(),
     };
     return settings;
+  });
+
+  app.post<{ Body: { pin?: string; enabled?: boolean } }>("/admin/auto-update", async (req, reply) => {
+    if (!pinOk(req.body?.pin)) return reply.code(401).send({ error: "bad_pin" });
+    if (typeof req.body?.enabled !== "boolean") return reply.code(400).send({ error: "bad_request" });
+    setAutoUpdateEnabled(req.body.enabled);
+    return { ok: true, enabled: isAutoUpdateEnabled() };
   });
 
   app.post<{ Body: { pin?: string; enabled?: boolean } }>("/setup/off-radar", async (req, reply) => {
@@ -404,6 +388,16 @@ export default async function apiRoutes(app: FastifyInstance): Promise<void> {
     if (!adminPinOk(req.body?.pin)) return reply.code(401).send({ error: "owner_required" });
     try {
       adminResetStats();
+      return { ok: true as const };
+    } catch (e) {
+      return { ok: false as const, error: (e as Error).message };
+    }
+  });
+
+  app.post<{ Body: { pin?: string } }>("/admin/reset-device", async (req, reply) => {
+    if (!adminPinOk(req.body?.pin)) return reply.code(401).send({ error: "owner_required" });
+    try {
+      adminResetDevice();
       return { ok: true as const };
     } catch (e) {
       return { ok: false as const, error: (e as Error).message };

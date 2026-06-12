@@ -80,6 +80,8 @@ export const api = {
     post<{ ok: boolean; enabled: boolean }>("/setup/adsblol", { pin, enabled }),
   saveOffRadar: (pin: string, enabled: boolean) =>
     post<{ ok: boolean; enabled: boolean }>("/setup/off-radar", { pin, enabled }),
+  saveAutoUpdate: (pin: string, enabled: boolean) =>
+    post<{ ok: boolean; enabled: boolean }>("/admin/auto-update", { pin, enabled }),
   /** Owner-only admin endpoints (master PIN required server-side). */
   deviceInfo: (pin: string) => post<{
     uptimeHuman: string; load1: number; load5: number; load15: number;
@@ -89,6 +91,7 @@ export const api = {
     buildAt?: string;
   }>("/admin/device-info", { pin }),
   adminResetStats: (pin: string) => post<{ ok: boolean; error?: string }>("/admin/reset-stats", { pin }),
+  adminResetDevice: (pin: string) => post<{ ok: boolean; error?: string }>("/admin/reset-device", { pin }),
   adminBackfillAchievements: (pin: string) => post<{ ok: boolean; processed?: number; fired?: number; error?: string }>("/admin/backfill-achievements", { pin }),
   adminDiagnoseAchievements: (pin: string) => post<{
     defined: number; rows: number; populated: number;

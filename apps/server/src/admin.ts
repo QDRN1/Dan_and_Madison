@@ -126,3 +126,27 @@ export function adminResetStats(): void {
     DELETE FROM achievements;
   `);
 }
+
+/** Full device reset — wipes ALL app state to factory defaults. Drops every
+ *  app table: settings (PIN, location, gateway, API keys), watches, sightings,
+ *  the whole lot. Next boot the friend lands on the CaptainQ setup wizard.
+ *
+ *  Explicitly NOT touched (the reset stops at the SQLite boundary):
+ *    - .env  (CF_TUNNEL_TOKEN, MASTER PIN, receiver lat/lon)
+ *    - ~/.cloudflared/  (tunnel credentials)
+ *    - Raspberry Pi Connect (systemd service, host-side)
+ *    - NetworkManager WiFi profiles, including baked HobbitHouse / LAN-Down-Under
+ *    - provisioning/baked-wifi.local.conf
+ *
+ *  Anything that gets you back into the device after reset survives. */
+export function adminResetDevice(): void {
+  db.exec(`
+    DELETE FROM sightings;
+    DELETE FROM flagged;
+    DELETE FROM coverage_range;
+    DELETE FROM achievements;
+    DELETE FROM watches;
+    DELETE FROM enrichment_cache;
+    DELETE FROM settings;
+  `);
+}
